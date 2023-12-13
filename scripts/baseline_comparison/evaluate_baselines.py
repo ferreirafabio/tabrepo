@@ -30,6 +30,9 @@ from scripts.baseline_comparison.baselines import (
     default_ensemble_size,
     n_portfolios_default,
 )
+
+from scripts.baseline_comparison.meta_learning import zeroshot_results_metalearning
+
 from scripts.baseline_comparison.compare_results import winrate_comparison
 from scripts.baseline_comparison.plot_utils import (
     MethodStyle,
@@ -212,10 +215,47 @@ def save_total_runtime_to_file(total_time_h):
         f.write(str(total_time_h))
 
 
+def generate_selected_config_hist_plots(df):
+    # create histograms for selected configs
+    from collections import Counter
+    import numpy as np
+    best_n_configs = 10
+    n_datasets = None  # only use a subset of the datasets (unique folds), set to None if all should be used
+    methods_in_df = df["method"].unique()
+    # [method for method in methods_in_df if "N1" in method]
+    for method in methods_in_df:
+        if n_datasets:
+            df = df.groupby('dataset', group_keys=False).apply(lambda x: x.sample(1))
+            # shuffle dataframe rows
+            df = df.sample(frac=1.0)[:n_datasets].reset_index(drop=True)
+
+        configs_selected = list(df[df["method"] == method]["config_selected"])
+        # convert string to list of strings
+        configs_selected = [eval(cfg) for cfg in configs_selected]
+        # flatten across all datasets and folds and count occurrences
+        config_counts = Counter(np.concatenate(configs_selected))
+        config_counts_dict = dict(config_counts)
+
+        # Select the top 'n' configs based on occurrences
+        top_n_configs = dict(sorted(config_counts.items(), key=lambda x: x[1], reverse=True)[:best_n_configs])
+
+        # Print the method and corresponding counts
+        print(f"Method: {method}")
+        print("Config Counts:", config_counts_dict)
+        plt.figure(figsize=(30, 25))
+        plt.bar(top_n_configs.keys(), top_n_configs.values())
+        plt.xticks(rotation=45, ha='right', fontsize=20)
+        plt.yticks(fontsize=20)
+        plt.tight_layout()
+        plt.savefig(str(Paths.data_root / "simulation" / expname / ("selected_cfg_histogram_" + method + ".png")))
+        plt.show()
+
+
+
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416_200")
+    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416_30")
     parser.add_argument("--n_folds", type=int, default=-1, required=False,
                         help="Number of folds to consider when evaluating all baselines. Uses all if set to -1.")
     parser.add_argument("--n_datasets", type=int, required=False, help="Number of datasets to consider when evaluating all baselines.")
@@ -226,6 +266,8 @@ if __name__ == "__main__":
                         help="Engine used for embarrassingly parallel loop.")
     parser.add_argument("--ray_process_ratio", type=float,
                         help="The ratio of ray processes to logical cpu cores. Use lower values to reduce memory usage. Only used if engine == 'ray'",)
+    parser.add_argument("--deactivate_meta_features", action="store_true",
+                        help="Ignore all meta features")
     args = parser.parse_args()
     print(args.__dict__)
 
@@ -235,7 +277,8 @@ if __name__ == "__main__":
     engine = args.engine
     expname = repo_version if args.expname is None else args.expname
     n_datasets = args.n_datasets
-    as_paper = args.all_configs
+    as_paper = not args.all_configs
+    use_meta_features = not args.deactivate_meta_features
 
     if n_datasets:
         expname += f"-{n_datasets}"
@@ -278,7 +321,7 @@ if __name__ == "__main__":
     if not as_paper:
         expname += "_ALL"
 
-    repo: EvaluationRepository = load_context(version=repo_version, ignore_cache=ignore_cache, as_paper=as_paper)
+    repo: EvaluationRepository = load_context(version=repo_version, ignore_cache=False, as_paper=as_paper)
     repo.print_info()
 
     if n_eval_folds == -1:
@@ -301,55 +344,68 @@ if __name__ == "__main__":
         normalized_scorer=normalized_scorer,
         n_eval_folds=n_eval_folds,
         engine=engine,
+        use_meta_features=use_meta_features,
     )
 
     experiments = [
-        Experiment(
-            expname=expname, name=f"framework-default-{expname}",
-            run_fun=lambda: framework_default_results(**experiment_common_kwargs)
-        ),
-        Experiment(
-            expname=expname, name=f"framework-best-{expname}",
-            run_fun=lambda: framework_best_results(max_runtimes=[3600, 3600 * 4, 3600 * 24], **experiment_common_kwargs),
-        ),
+        # Experiment(
+        #     expname=expname, name=f"framework-default-{expname}",
+        #     run_fun=lambda: framework_default_results(**experiment_common_kwargs)
+        # ),
+        # Experiment(
+        #     expname=expname, name=f"framework-best-{expname}",
+        #     run_fun=lambda: framework_best_results(max_runtimes=[3600, 3600 * 4, 3600 * 24], **experiment_common_kwargs),
+        # ),
         # Experiment(
         #     expname=expname, name=f"framework-all-best-{expname}",
         #     run_fun=lambda: framework_best_results(framework_types=[None], max_runtimes=[3600, 3600 * 4, 3600 * 24], **experiment_common_kwargs),
         # ),
         # Automl baselines such as Autogluon best, high, medium quality
+        # Experiment(
+        #     expname=expname, name=f"automl-baselines-{expname}",
+        #     run_fun=lambda: automl_results(**experiment_common_kwargs),
+        # ),
         Experiment(
-            expname=expname, name=f"automl-baselines-{expname}",
-            run_fun=lambda: automl_results(**experiment_common_kwargs),
+            expname=expname, name=f"zeroshot-metalearning-{expname}",
+            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs)
         ),
         Experiment(
             expname=expname, name=f"zeroshot-{expname}",
             run_fun=lambda: zeroshot_results(**experiment_common_kwargs)
         ),
         Experiment(
-            expname=expname, name=f"zeroshot-{expname}-maxruntimes",
-            run_fun=lambda: zeroshot_results(max_runtimes=max_runtimes, **experiment_common_kwargs)
+            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
+            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs, n_portfolios=[1])
         ),
+        Experiment(
+            expname=expname, name=f"zeroshot-singlebest-{expname}",
+            run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
+        ),
+        # Experiment(
+        #     expname=expname, name=f"zeroshot-{expname}-maxruntimes",
+        #     run_fun=lambda: zeroshot_results(max_runtimes=max_runtimes, **experiment_common_kwargs)
+        # ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-num-folds",
         #     run_fun=lambda: zeroshot_results(n_training_folds=n_training_folds, ** experiment_common_kwargs)
         # ),
-        Experiment(
-            expname=expname, name=f"zeroshot-{expname}-num-portfolios",
-            run_fun=lambda: zeroshot_results(n_portfolios=n_portfolios, n_ensembles=[1, default_ensemble_size], **experiment_common_kwargs)
-        ),
+        # Experiment(
+        #     expname=expname, name=f"zeroshot-{expname}-num-portfolios",
+        #     run_fun=lambda: zeroshot_results(n_portfolios=n_portfolios, n_ensembles=[1, default_ensemble_size], **experiment_common_kwargs)
+        # ),
     ]
 
     # Use more seeds
-    for seed in range(n_seeds):
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-{expname}-num-configs-{seed}",
-            run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs, **experiment_common_kwargs)
-        ))
-
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-{expname}-num-training-datasets-{seed}",
-            run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets, **experiment_common_kwargs)
-        ))
+    # for seed in range(n_seeds):
+    #     experiments.append(Experiment(
+    #         expname=expname, name=f"zeroshot-{expname}-num-configs-{seed}",
+    #         run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs, **experiment_common_kwargs)
+    #     ))
+    #
+    #     experiments.append(Experiment(
+    #         expname=expname, name=f"zeroshot-{expname}-num-training-datasets-{seed}",
+    #         run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets, **experiment_common_kwargs)
+    #     ))
 
 
     with catchtime("total time to generate evaluations"):
@@ -365,6 +421,8 @@ if __name__ == "__main__":
 
     # df = time_cutoff_baseline(df)
 
+    generate_selected_config_hist_plots(df)
+
     print(f"Obtained {len(df)} evaluations on {len(df.dataset.unique())} datasets for {len(df.method.unique())} methods.")
     print(f"Methods available:" + "\n".join(sorted(df.method.unique())))
     total_time_h = df.loc[:, "time fit (s)"].sum() / 3600
@@ -372,7 +430,7 @@ if __name__ == "__main__":
     save_total_runtime_to_file(total_time_h)
 
 
-    generate_sentitivity_plots(df, show=False)
+    #generate_sentitivity_plots(df, show=False)
 
     show_latex_table(df, "all", show_table=True, n_digits=n_digits)
     ag_styles = [
@@ -513,6 +571,6 @@ if __name__ == "__main__":
     fig.savefig(fig_save_path, bbox_extra_artists=bbox_extra_artists, bbox_inches='tight')
     fig.show()
 
-    plot_critical_diagrams(df)
+    # plot_critical_diagrams(df)
 
     winrate_comparison(df=df, repo=repo)

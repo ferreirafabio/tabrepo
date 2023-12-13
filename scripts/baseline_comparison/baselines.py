@@ -1,6 +1,9 @@
 import ast
 import copy
 import itertools
+import os
+import shutil
+import pandas as pd
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -15,7 +18,9 @@ from tabrepo.repository.time_utils import (
     sort_by_runtime,
     get_runtime,
 )
+from tabrepo.utils.meta_features import get_meta_features
 from tabrepo.utils.parallel_for import parallel_for
+from autogluon.tabular import TabularPredictor
 
 default_ensemble_size = 40
 n_portfolios_default = 200
@@ -313,6 +318,7 @@ def zeroshot_name(
         n_portfolio: int = n_portfolios_default, n_ensemble: int = None, n_training_dataset: int = None,
         n_training_fold: int = None, n_training_config: int = None,
         max_runtime: float = default_runtime,
+        name_suffix: str = "",
 ):
     """
     :return: name of the zeroshot method such as Zeroshot-N20-C40 if n_training_dataset or n_training_folds are not
@@ -324,6 +330,8 @@ def zeroshot_name(
         for letter, x in
         [("N", n_portfolio), ("D", n_training_dataset), ("S", n_training_fold), ("M", n_training_config)]
     ]
+    suffix += name_suffix
+
     # if n_ensemble:
     #     suffix += f"-C{n_ensemble}"
     suffix = "".join(suffix)
@@ -363,6 +371,7 @@ def zeroshot_results(
         n_training_configs: List[int] = [None],
         max_runtimes: List[float] = [default_runtime],
         engine: str = "ray",
+        use_meta_features: bool = True,
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
