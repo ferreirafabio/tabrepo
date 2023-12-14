@@ -4,7 +4,11 @@ import itertools
 import os
 import shutil
 import pandas as pd
+import hashlib
 from typing import List, Optional, Tuple
+import random
+
+from AutoFolio.autofolio.facade.af_csv_facade import AFCsvFacade
 
 import numpy as np
 from dataclasses import dataclass
@@ -33,6 +37,16 @@ default_runtime = 3600 * 4
 
 backup_fast_config = "ExtraTrees_c1_BAG_L1"
 
+
+def generate_worker_hash():
+    # Get the process ID of the current worker
+    worker_id = os.getpid()
+
+    # Create a unique hash using the process ID
+    hash_object = hashlib.sha256(str(worker_id).encode())
+    worker_hash = hash_object.hexdigest()
+
+    return worker_hash
 
 def zeroshot_results_metalearning(
         repo: EvaluationRepository,
@@ -161,47 +175,136 @@ def zeroshot_results_metalearning(
         df_rank_test = df_rank_test.groupby(["framework", "dataset"])["rank"].agg(['mean', 'std']).reset_index()
         df_rank_test.rename(columns={"mean": "rank", "std": "std_dev_rank"}, inplace=True)
 
-        if use_meta_features:
-            # only use framework (without dataset) + rank
-            # df_rank_train = df_rank_train[["framework", "rank"]].groupby(["framework"])["rank"].mean()
-            # df_rank_train = df_rank_train.reset_index(drop=False)
-            # df_rank_test = df_rank_test[["framework", "rank"]].groupby(["framework"])["rank"].mean()
-            # df_rank_test = df_rank_test.reset_index(drop=False)
+        # if use_meta_features:
+        #     # only use framework (without dataset) + rank
+        #     # df_rank_train = df_rank_train[["framework", "rank"]].groupby(["framework"])["rank"].mean()
+        #     # df_rank_train = df_rank_train.reset_index(drop=False)
+        #     # df_rank_test = df_rank_test[["framework", "rank"]].groupby(["framework"])["rank"].mean()
+        #     # df_rank_test = df_rank_test.reset_index(drop=False)
+        #
+        #     # merge meta features into the performance data
+        #     train_meta = df_rank_train.merge(df_meta_features_train, on=["dataset"])
+        #     test_meta = df_rank_test.merge(df_meta_features_test, on=["dataset"])
+        #     # quick sanity check: see if test_tid is in train data
+        #     assert not any(str(value) == (str(repo.tid_to_dataset(test_tid))) for value in train_meta['dataset']), \
+        #         print(f"test dataset {str(repo.tid_to_dataset(test_tid))} seems to be in the train data")
+        # else:
+        #     # deactivated meta features (-> in an AG-learned version of zero-shot)
+        #     train_meta = df_rank_train
+        #     test_meta = df_rank_test
+        #
+        # train_meta.drop(['dataset'], axis=1, inplace=True)
+        # test_meta.drop(['dataset'], axis=1, inplace=True)
 
-            # merge meta features into the performance data
-            train_meta = df_rank_train.merge(df_meta_features_train, on=["dataset"])
-            test_meta = df_rank_test.merge(df_meta_features_test, on=["dataset"])
-            # quick sanity check: see if test_tid is in train data
-            assert not any(str(value) == (str(repo.tid_to_dataset(test_tid))) for value in train_meta['dataset']), \
-                print(f"test dataset {str(repo.tid_to_dataset(test_tid))} seems to be in the train data")
-        else:
-            # deactivated meta features (-> in an AG-learned version of zero-shot)
-            train_meta = df_rank_train
-            test_meta = df_rank_test
+        try:
+            hsh = generate_worker_hash()
+            current_directory = os.getcwd()
+            new_directory_path = os.path.join(current_directory, "as_files")
 
-        train_meta.drop(['dataset'], axis=1, inplace=True)
-        test_meta.drop(['dataset'], axis=1, inplace=True)
+            # Check if the directory already exists before creating it
+            if not os.path.exists(new_directory_path):
+                os.makedirs(new_directory_path)
 
-        predictor = TabularPredictor(label="rank").fit(
-            train_meta,
-            # hyperparameters={
-            # "RF": {},
-            # "DUMMY": {},
-            # "GBM": {},
-            # },
-            # time_limit=1200,
-            # time_limit=600,
-            time_limit=300,
-            # time_limit=10,
-            # time_limit=30,
-        )
-        predictor.leaderboard(display=True)
+            # performance matrix: (column: algorithm, row: instance, delimeter: ,)
+            df_rank_train.drop(["std_dev_rank"], axis=1, inplace=True)
+            df_rank_train = df_rank_train.pivot(index="dataset", columns="framework", values="rank")
+
+            # to speedup fitting, drop some algos
+            # columns_to_drop = random.sample(df_rank_train.columns.tolist(), 1000)
+            # df_rank_train = df_rank_train.drop(columns_to_drop, axis=1)
+
+            # df_rank_train.to_csv("perf.csv")
+            df_rank_train.to_csv(f"as_files/perf_{hsh}.csv", index=True, index_label="")  # to match AF example 1:1
+
+            df_rank_test.drop(["std_dev_rank"], axis=1, inplace=True)
+            df_rank_test = df_rank_test.pivot(index="dataset", columns="framework", values="rank")
+
+            # only needed for speedup!!!!!
+            # df_rank_test = df_rank_test.drop(columns_to_drop, axis=1)
+
+            # feature matrix: (column: features, row: instance, delimeter: ,)
+            # df_meta_features_train.drop(["dataset"], axis=1, inplace=True)
+            # df_meta_features_train.to_csv("feats.csv")
+            df_meta_features_train.set_index("dataset", inplace=True)
+            df_meta_features_train.to_csv(f"as_files/feats_{hsh}.csv", index=True, index_label="")
+
+            # df_meta_features_test.drop(["dataset"], axis=1, inplace=True)
+            # df_meta_features_test.to_csv("feats_test.csv")
+            df_meta_features_test.set_index("dataset", inplace=True)
+            # df_meta_features_test.to_csv(f"as_files/feats_test_{hsh}.csv", index=True, index_label="")
+
+            perf_fn = f"as_files/perf_{hsh}.csv"
+            feat_fn = f"as_files/feats_{hsh}.csv"
+
+            # will be created (or overwritten) by AutoFolio
+            model_fn = f"as_files/af_model_{hsh}.pkl"
+
+            # try:
+            af = AFCsvFacade(perf_fn=perf_fn, feat_fn=feat_fn)
+            # except Exception as e:
+            #     print(e)
+            #     if pd.isnull(df_rank_train).sum().sum() > 0:
+            #         print("perf data cannot have missing entries")
+            #     print(df_rank_train)
+
+            # fit AutoFolio; will use default hyperparameters of AutoFolio
+
+            # config = {'StandardScaler': False, 'fgroup_all': True, 'imputer_strategy': 'mean', 'pca': False,
+            #           'selector': 'IndRegressor', 'classifier': 'RandomForest', 'imputer_strategy': 'mean', 'pca': False,
+            #            'rfreg:bootstrap': False, 'rfreg:criterion': 'gini', 'rfreg:max_depth': 132, 'rfreg:max_features': 'log2',
+            #           'rfreg:min_samples_leaf': 3, 'rfreg:min_samples_split': 3, 'rfreg:n_estimators': 68}
+            # config = {'StandardScaler': False, 'fgroup_all': True, 'imputer_strategy': 'mean', 'pca': False,
+            #           'selector': 'PairwiseClassifier', 'classifier': 'RandomForest', 'rf:bootstrap': False,
+            #           'rf:criterion': 'gini', 'rf:max_depth': 132, 'rf:max_features': 'log2', 'rf:min_samples_leaf': 3,
+            #           'rf:min_samples_split': 3, 'rf:n_estimators': 68}
+
+            af.fit(save_fn=model_fn)
+            portfolio_configs = AFCsvFacade.load_and_predict(vec=df_meta_features_test.values.reshape(-1), load_fn=model_fn)
+            portfolio_configs = portfolio_configs[: n_portfolio]
+
+        except Exception as e:
+            os.remove(perf_fn)
+            os.remove(feat_fn)
+            os.remove(model_fn)
+        finally:
+            os.remove(perf_fn)
+            os.remove(feat_fn)
+            os.remove(model_fn)
+
+        # fit AF using a loaded configuration on all data!
+        # af.fit(config=config)
+
+        # tune AutoFolio's hyperparameter configuration for 4 seconds
+        # import errors with SMAC --> don't do tuning for now
+        # config = af.tune(wallclock_limit=4)
+
+        # evaluate configuration using a 10-fold cross validation
+        # score = af.cross_validation(config=config)
+
+        # re-fit AutoFolio using the (hopefully) better configuration
+        # and save model to disk
+        # af.fit(config=config, save_fn=model_fn)
+
+        # predictor = TabularPredictor(label="rank").fit(
+        #     train_meta,
+        #     # hyperparameters={
+        #     # "RF": {},
+        #     # "DUMMY": {},
+        #     # "GBM": {},
+        #     # },
+        #     # time_limit=1200,
+        #     # time_limit=600,
+        #     time_limit=300,
+        #     # time_limit=10,
+        #     # time_limit=30,
+        # )
+        # predictor.leaderboard(display=True)
 
         # run predict to get the portfolio
-        ranks = predictor.predict(test_meta)
-        portfolio_configs = pd.concat([ranks, test_meta["framework"]], axis=1).sort_values(by="rank", ascending=True)
-        portfolio_configs = portfolio_configs[:n_portfolio]["framework"].tolist()
-        shutil.rmtree(predictor.path)
+        # ranks = predictor.predict(test_meta)
+        # portfolio_configs = pd.concat([ranks, test_meta["framework"]], axis=1).sort_values(by="rank", ascending=True)
+        # portfolio_configs = portfolio_configs[:n_portfolio]["framework"].tolist()
+        # shutil.rmtree(predictor.path)
 
         # TODO: Technically we should exclude data from the fold when computing the average runtime and also pass the
         #  current fold when filtering by runtime.

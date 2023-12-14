@@ -51,7 +51,7 @@ class CppAuc:
             proc = subprocess.Popen(compile_command.split(" "), shell=False, stdout=stdout, cwd=Path(__file__).parent)
 
         # wait command completion
-        for max_trials in range(50):
+        for max_trials in range(200):
             if proc.poll() is not None:
                 break
             time.sleep(0.1)
