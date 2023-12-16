@@ -7,6 +7,7 @@ import pandas as pd
 import hashlib
 from typing import List, Optional, Tuple
 import random
+import contextlib
 
 from AutoFolio.autofolio.facade.af_csv_facade import AFCsvFacade
 
@@ -240,14 +241,7 @@ def zeroshot_results_metalearning(
             model_fn = f"as_files/af_model_{hsh}.pkl"
 
             # try:
-            af = AFCsvFacade(perf_fn=perf_fn, feat_fn=feat_fn)
-            # except Exception as e:
-            #     print(e)
-            #     if pd.isnull(df_rank_train).sum().sum() > 0:
-            #         print("perf data cannot have missing entries")
-            #     print(df_rank_train)
-
-            # fit AutoFolio; will use default hyperparameters of AutoFolio
+            af = AFCsvFacade(perf_fn=perf_fn, feat_fn=feat_fn, maximize=False)
 
             # config = {'StandardScaler': False, 'fgroup_all': True, 'imputer_strategy': 'mean', 'pca': False,
             #           'selector': 'IndRegressor', 'classifier': 'RandomForest', 'imputer_strategy': 'mean', 'pca': False,
@@ -258,18 +252,21 @@ def zeroshot_results_metalearning(
             #           'rf:criterion': 'gini', 'rf:max_depth': 132, 'rf:max_features': 'log2', 'rf:min_samples_leaf': 3,
             #           'rf:min_samples_split': 3, 'rf:n_estimators': 68}
 
+            # fit AutoFolio; will use default hyperparameters of AutoFolio
             af.fit(save_fn=model_fn)
             portfolio_configs = AFCsvFacade.load_and_predict(vec=df_meta_features_test.values.reshape(-1), load_fn=model_fn)
-            portfolio_configs = portfolio_configs[: n_portfolio]
+            portfolio_configs = portfolio_configs[:n_portfolio]
 
         except Exception as e:
-            os.remove(perf_fn)
-            os.remove(feat_fn)
-            os.remove(model_fn)
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(perf_fn)
+                os.remove(feat_fn)
+                os.remove(model_fn)
         finally:
-            os.remove(perf_fn)
-            os.remove(feat_fn)
-            os.remove(model_fn)
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(perf_fn)
+                os.remove(feat_fn)
+                os.remove(model_fn)
 
         # fit AF using a loaded configuration on all data!
         # af.fit(config=config)

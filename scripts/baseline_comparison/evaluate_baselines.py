@@ -336,6 +336,12 @@ if __name__ == "__main__":
     configs_default = [c for c in repo.configs() if "_c1_" in c]
     framework_types = [c.rsplit('_c1_', 1)[0] for c in configs_default]
 
+    # TODO: removing XGBoost, LightGBM for now to speed-up AutoFolio (603 configs)
+    # framework_types.remove("XGBoost")
+    # framework_types.remove("LightGBM")
+    # framework_types.remove("NeuralNetTorch")
+    #["CatBoost", "ExtraTrees", "RandomForest"]
+
     experiment_common_kwargs = dict(
         repo=repo,
         dataset_names=dataset_names,
@@ -373,14 +379,14 @@ if __name__ == "__main__":
             expname=expname, name=f"zeroshot-{expname}",
             run_fun=lambda: zeroshot_results(**experiment_common_kwargs)
         ),
-        Experiment(
-            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
-            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs, n_portfolios=[1])
-        ),
-        Experiment(
-            expname=expname, name=f"zeroshot-singlebest-{expname}",
-            run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
-        ),
+        # Experiment(
+        #     expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
+        #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs, n_portfolios=[1])
+        # ),
+        # Experiment(
+        #     expname=expname, name=f"zeroshot-singlebest-{expname}",
+        #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
+        # ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-maxruntimes",
         #     run_fun=lambda: zeroshot_results(max_runtimes=max_runtimes, **experiment_common_kwargs)
@@ -441,6 +447,8 @@ if __name__ == "__main__":
     ]
 
     method_styles = ag_styles.copy()
+    # TODO: comment this back in (Fabio)
+    # print("commented out NeuralNetTorch/MLP")
     framework_types.remove("NeuralNetTorch")
     framework_types.append("MLP")
 
