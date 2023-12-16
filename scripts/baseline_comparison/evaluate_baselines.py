@@ -421,7 +421,7 @@ if __name__ == "__main__":
 
     # df = time_cutoff_baseline(df)
 
-    generate_selected_config_hist_plots(df)
+    # generate_selected_config_hist_plots(df)
 
     print(f"Obtained {len(df)} evaluations on {len(df.dataset.unique())} datasets for {len(df.method.unique())} methods.")
     print(f"Methods available:" + "\n".join(sorted(df.method.unique())))
