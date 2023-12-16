@@ -189,9 +189,9 @@ def zeroshot_results_metalearning(
             # "DUMMY": {},
             # "GBM": {},
             # },
-            # time_limit=1200,
+            time_limit=1200,
             # time_limit=600,
-            time_limit=300,
+            # time_limit=300,
             # time_limit=10,
             # time_limit=30,
         )

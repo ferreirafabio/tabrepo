@@ -6,7 +6,7 @@ from tabrepo.loaders import Paths
 import os
 # Read CSV file
 print(os.getcwd())
-exp_name = "D244_F3_C1416_30"
+exp_name = "D244_F3_C1416"
 extra_title = "" #" (~800 configs; LightGBM & XGBoost excluded)"
 
 top_n_configs = 10
