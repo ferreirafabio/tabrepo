@@ -332,6 +332,10 @@ if __name__ == "__main__":
     if n_datasets:
         dataset_names = dataset_names[:n_datasets]
 
+    # TODO: filter configs for AutoFolio (put this in AF branch)
+    # repo.configs()
+    # repo = repo.subset(configs=)
+
     # TODO: This is a hack, in future repo should know the framework_types via the configs.json input
     configs_default = [c for c in repo.configs() if "_c1_" in c]
     framework_types = [c.rsplit('_c1_', 1)[0] for c in configs_default]
@@ -367,7 +371,10 @@ if __name__ == "__main__":
         # ),
         Experiment(
             expname=expname, name=f"zeroshot-metalearning-{expname}",
-            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs)
+            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
+                                                          name=f"zeroshot-metalearning-{expname}",
+                                                          expname=expname
+                                                          )
         ),
         Experiment(
             expname=expname, name=f"zeroshot-{expname}",
@@ -375,7 +382,11 @@ if __name__ == "__main__":
         ),
         Experiment(
             expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
-            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs, n_portfolios=[1])
+            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
+                                                          n_portfolios=[1],
+                                                          name=f"zeroshot-metalearning-singlebest-{expname}",
+                                                          expname=expname,
+                                                          )
         ),
         Experiment(
             expname=expname, name=f"zeroshot-singlebest-{expname}",

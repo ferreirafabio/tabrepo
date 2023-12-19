@@ -18,6 +18,8 @@ df['config_selected'] = df['config_selected'].apply(literal_eval)  # Convert str
 # Define method names
 method1 = 'Portfolio-N200 metalearning (ensemble) (4h)'
 method2 = 'Portfolio-N200 (ensemble) (4h)'
+# method1 = 'Portfolio-N1 metalearning (ensemble) (4h)'
+# method2 = 'Portfolio-N1 (ensemble) (4h)'
 
 # Function to get the top N configurations for each method
 def get_top_n_configs(df_method, n=5):

@@ -19,6 +19,8 @@ from tabrepo.repository.time_utils import (
 from tabrepo.utils.meta_features import get_meta_features
 from tabrepo.utils.parallel_for import parallel_for
 from autogluon.tabular import TabularPredictor
+from scripts.baseline_comparison.vis_utils import save_feature_important_plots
+from tabrepo.loaders import Paths
 
 from scripts.baseline_comparison.baselines import (
     evaluate_configs,
@@ -49,6 +51,8 @@ def zeroshot_results_metalearning(
         max_runtimes: List[float] = [default_runtime],
         engine: str = "ray",
         use_meta_features: bool = True,
+        name: str = "",
+        expname: str = "",
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -149,17 +153,17 @@ def zeroshot_results_metalearning(
         df_rank_train = df_rank_all[train_mask].drop(columns=["task"])
         df_rank_test = df_rank_all[~train_mask].drop(columns=["task"])
 
-        # df_rank_train = df_rank_train.groupby(["framework", "dataset"])["rank"].mean()
-        # df_rank_train = df_rank_train.reset_index(drop=False)
+        df_rank_train = df_rank_train.groupby(["framework", "dataset"])["rank"].mean()
+        df_rank_train = df_rank_train.reset_index(drop=False)
 
         # additionally provide the std deviation
-        df_rank_train = df_rank_train.groupby(["framework", "dataset"])["rank"].agg(['mean', 'std']).reset_index()
-        df_rank_train.rename(columns={"mean": "rank", "std": "std_dev_rank"}, inplace=True)
+        # df_rank_train = df_rank_train.groupby(["framework", "dataset"])["rank"].agg(['mean', 'std']).reset_index()
+        # df_rank_train.rename(columns={"mean": "rank", "std": "std_dev_rank"}, inplace=True)
 
-        # df_rank_test = df_rank_test.groupby(["framework", "dataset"])["rank"].mean()
-        # df_rank_test = df_rank_test.reset_index(drop=False)
-        df_rank_test = df_rank_test.groupby(["framework", "dataset"])["rank"].agg(['mean', 'std']).reset_index()
-        df_rank_test.rename(columns={"mean": "rank", "std": "std_dev_rank"}, inplace=True)
+        df_rank_test = df_rank_test.groupby(["framework", "dataset"])["rank"].mean()
+        df_rank_test = df_rank_test.reset_index(drop=False)
+        # df_rank_test = df_rank_test.groupby(["framework", "dataset"])["rank"].agg(['mean', 'std']).reset_index()
+        # df_rank_test.rename(columns={"mean": "rank", "std": "std_dev_rank"}, inplace=True)
 
         if use_meta_features:
             # only use framework (without dataset) + rank
@@ -181,6 +185,7 @@ def zeroshot_results_metalearning(
 
         train_meta.drop(['dataset'], axis=1, inplace=True)
         test_meta.drop(['dataset'], axis=1, inplace=True)
+        # test_meta.drop(['std_dev_rank'], axis=1, inplace=True)
 
         predictor = TabularPredictor(label="rank").fit(
             train_meta,
@@ -189,16 +194,20 @@ def zeroshot_results_metalearning(
             # "DUMMY": {},
             # "GBM": {},
             # },
-            time_limit=1200,
+            # time_limit=1200,
             # time_limit=600,
             # time_limit=300,
-            # time_limit=10,
+            time_limit=10,
             # time_limit=30,
+            verbosity=3,
         )
         predictor.leaderboard(display=True)
 
         # run predict to get the portfolio
         ranks = predictor.predict(test_meta)
+        mean_test_error = np.abs(test_meta["rank"]-ranks).mean()
+
+        feature_importance_df = predictor.feature_importance(test_meta)
         portfolio_configs = pd.concat([ranks, test_meta["framework"]], axis=1).sort_values(by="rank", ascending=True)
         portfolio_configs = portfolio_configs[:n_portfolio]["framework"].tolist()
         shutil.rmtree(predictor.path)
@@ -219,7 +228,7 @@ def zeroshot_results_metalearning(
             # configuration that takes <1s to be evaluated
             portfolio_configs = [backup_fast_config]
 
-        return evaluate_configs(
+        evaluate_configs_result = evaluate_configs(
             repo=repo,
             rank_scorer=rank_scorer,
             normalized_scorer=normalized_scorer,
@@ -229,6 +238,13 @@ def zeroshot_results_metalearning(
             method=method_name,
             folds=range(n_eval_folds),
         )
+
+        return_dct = {
+            "evaluate_configs_result": evaluate_configs_result,
+            "feature_importance_df": feature_importance_df,
+            "mean_test_error": mean_test_error
+        }
+        return return_dct
 
     dd = repo._zeroshot_context.df_configs_ranked
     # df_rank = dd.pivot_table(index="framework", columns="dataset", values="score_val").rank()
@@ -247,7 +263,7 @@ def zeroshot_results_metalearning(
         for framework in framework_types
     }
 
-    list_rows = parallel_for(
+    result_list = parallel_for(
         evaluate_dataset,
         inputs=list(itertools.product(dataset_names, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
                                       n_training_configs, max_runtimes)),
@@ -255,4 +271,14 @@ def zeroshot_results_metalearning(
                      model_frameworks=model_frameworks, use_meta_features=use_meta_features),
         engine=engine,
     )
-    return [x for l in list_rows for x in l]
+
+    mean_test_error = np.mean([result_dct["mean_test_error"] for result_dct in result_list])
+    print(f"mean test error for {name}: {mean_test_error:.3f}")
+
+    feature_importances = [result_dct["feature_importance_df"] for result_dct in result_list]
+    feature_importance_averages = pd.concat(feature_importances).groupby(level=0).mean()
+    save_feature_important_plots(feature_importance_averages[["importance", "stddev", "p_value", "n"]],
+                                 save_path=str(Paths.data_root / "simulation" / expname / f"{name}_feat_imp"),
+                                 )
+
+    return [x for result_dct in result_list for x in result_dct["evaluate_configs_result"]]
