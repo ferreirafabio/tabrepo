@@ -8,7 +8,10 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 from dataclasses import dataclass
+import random
+from sklearn.model_selection import KFold
 
+from sklearn.metrics import mean_squared_error
 from tabrepo.portfolio.zeroshot_selection import zeroshot_configs
 from tabrepo.repository import EvaluationRepository
 from tabrepo.repository.time_utils import (
@@ -67,7 +70,7 @@ def zeroshot_results_metalearning(
     :return: evaluation obtained on all combinations
     """
 
-    def evaluate_dataset(test_dataset, n_portfolio, n_ensemble, n_training_dataset, n_training_fold, n_training_config,
+    def evaluate_dataset(test_datasets, n_portfolio, n_ensemble, n_training_dataset, n_training_fold, n_training_config,
                          max_runtime, repo: EvaluationRepository, df_rank, rank_scorer, normalized_scorer,
                          model_frameworks, use_meta_features):
         method_name = zeroshot_name(
@@ -85,8 +88,11 @@ def zeroshot_results_metalearning(
             n_training_fold = n_eval_folds
 
         # gets all tids that are possible available
-        test_tid = repo.dataset_to_tid(test_dataset)
-        available_tids = [repo.dataset_to_tid(dataset) for dataset in dataset_names if dataset != test_dataset]
+        # test_tid = repo.dataset_to_tid(test_dataset)
+        test_tids = [repo.dataset_to_tid(t_d) for t_d in test_datasets] # TODO: use datasets instead of tid
+        # available_tids = [repo.dataset_to_tid(dataset) for dataset in dataset_names if dataset != test_dataset]
+        # TODO: call this training_tids
+        available_tids = [repo.dataset_to_tid(dataset) for dataset in dataset_names if dataset not in test_datasets]
         np.random.shuffle(available_tids)
         if n_training_dataset is None:
             n_training_dataset = len(available_tids)
@@ -108,7 +114,8 @@ def zeroshot_results_metalearning(
 
         # # exclude configurations from zeroshot selection whose runtime exceeds runtime budget by large amount
         if max_runtime:
-            configs = filter_configurations_above_budget(repo, test_tid, configs, max_runtime)
+            # configs = filter_configurations_above_budget(repo, test_tid, configs, max_runtime)
+            configs = filter_configurations_above_budget(repo, test_tids, configs, max_runtime)
 
         df_rank = df_rank.copy().loc[configs]
 
@@ -176,15 +183,16 @@ def zeroshot_results_metalearning(
             train_meta = df_rank_train.merge(df_meta_features_train, on=["dataset"])
             test_meta = df_rank_test.merge(df_meta_features_test, on=["dataset"])
             # quick sanity check: see if test_tid is in train data
-            assert not any(str(value) == (str(repo.tid_to_dataset(test_tid))) for value in train_meta['dataset']), \
-                print(f"test dataset {str(repo.tid_to_dataset(test_tid))} seems to be in the train data")
+            # t_ds = np.random.choice(test_tids)
+            # assert not any(str(value) == (str(repo.tid_to_dataset(t_ds))) for value in train_meta['dataset']), \
+            #     print(f"test dataset {str(repo.tid_to_dataset(t_ds))} seems to be in the train data")
         else:
             # deactivated meta features (-> in an AG-learned version of zero-shot)
             train_meta = df_rank_train
             test_meta = df_rank_test
 
         train_meta.drop(['dataset'], axis=1, inplace=True)
-        test_meta.drop(['dataset'], axis=1, inplace=True)
+        test_meta_new = test_meta.drop(['dataset'], axis=1)
         # test_meta.drop(['std_dev_rank'], axis=1, inplace=True)
 
         predictor = TabularPredictor(label="rank").fit(
@@ -199,50 +207,59 @@ def zeroshot_results_metalearning(
             # time_limit=300,
             time_limit=10,
             # time_limit=30,
-            verbosity=3,
+            # verbosity=3,
         )
         predictor.leaderboard(display=True)
 
         # run predict to get the portfolio
-        ranks = predictor.predict(test_meta)
-        mean_test_error = np.abs(test_meta["rank"]-ranks).mean()
-
+        ranks = predictor.predict(test_meta_new)
+        rmse_test = np.sqrt(mean_squared_error(test_meta["rank"], ranks))
         feature_importance_df = predictor.feature_importance(test_meta)
-        portfolio_configs = pd.concat([ranks, test_meta["framework"]], axis=1).sort_values(by="rank", ascending=True)
-        portfolio_configs = portfolio_configs[:n_portfolio]["framework"].tolist()
+
+        all_config_results_per_ds, all_portfolios_per_ds = {}, {}
+        all_predicted_ranks_all_datasets = pd.concat([ranks, test_meta["dataset"], test_meta["framework"]], axis=1)
+
+        for test_ds in test_datasets:
+            ranks_per_ds = all_predicted_ranks_all_datasets[all_predicted_ranks_all_datasets['dataset'] == test_ds]
+            ranks_per_ds = ranks_per_ds.sort_values(by="rank", ascending=True)
+            portfolio_configs_per_ds = ranks_per_ds[:n_portfolio]["framework"].tolist()
+
+            # TODO: Technically we should exclude data from the fold when computing the average runtime and also pass the
+            #  current fold when filtering by runtime.
+            # portfolio_configs = sort_by_runtime(repo=repo, config_names=portfolio_configs)
+
+            portfolio_configs_per_ds = filter_configs_by_runtime(
+                repo=repo,
+                tid=repo.dataset_to_tid(test_ds),
+                fold=0,
+                config_names=portfolio_configs_per_ds,
+                max_cumruntime=max_runtime if max_runtime else default_runtime, # TODO
+            )
+            if len(portfolio_configs_per_ds) == 0:
+                # in case all configurations selected were above the budget, we evaluate a quick backup, we pick a
+                # configuration that takes <1s to be evaluated
+                portfolio_configs_per_ds = [backup_fast_config]
+
+            all_portfolios_per_ds[test_ds] = portfolio_configs_per_ds
+
+            evaluate_configs_result = evaluate_configs(
+                repo=repo,
+                rank_scorer=rank_scorer,
+                normalized_scorer=normalized_scorer,
+                config_selected=portfolio_configs_per_ds,
+                ensemble_size=n_ensemble,
+                tid=repo.dataset_to_tid(test_ds),
+                method=method_name,
+                folds=range(n_eval_folds),
+            )
+            all_config_results_per_ds[test_ds] = evaluate_configs_result
+
         shutil.rmtree(predictor.path)
 
-        # TODO: Technically we should exclude data from the fold when computing the average runtime and also pass the
-        #  current fold when filtering by runtime.
-        # portfolio_configs = sort_by_runtime(repo=repo, config_names=portfolio_configs)
-
-        portfolio_configs = filter_configs_by_runtime(
-            repo=repo,
-            tid=test_tid,
-            fold=0,
-            config_names=portfolio_configs,
-            max_cumruntime=max_runtime if max_runtime else default_runtime, # TODO
-        )
-        if len(portfolio_configs) == 0:
-            # in case all configurations selected were above the budget, we evaluate a quick backup, we pick a
-            # configuration that takes <1s to be evaluated
-            portfolio_configs = [backup_fast_config]
-
-        evaluate_configs_result = evaluate_configs(
-            repo=repo,
-            rank_scorer=rank_scorer,
-            normalized_scorer=normalized_scorer,
-            config_selected=portfolio_configs,
-            ensemble_size=n_ensemble,
-            tid=test_tid,
-            method=method_name,
-            folds=range(n_eval_folds),
-        )
-
         return_dct = {
-            "evaluate_configs_result": evaluate_configs_result,
+            "evaluate_configs_result": all_config_results_per_ds,
             "feature_importance_df": feature_importance_df,
-            "mean_test_error": mean_test_error
+            "rmse_test": rmse_test
         }
         return return_dct
 
@@ -263,22 +280,35 @@ def zeroshot_results_metalearning(
         for framework in framework_types
     }
 
+    total_size = len(dataset_names)
+    test_ratio = 0.3
+    n_splits = total_size // int(total_size * test_ratio)
+    kf = KFold(n_splits=n_splits)
+    test_dataset_folds = []
+    for i, (_, test_index) in enumerate(kf.split(X=dataset_names)):
+        test_datasets = [dataset_names[i] for i in test_index]
+        test_dataset_folds.append(test_datasets)
+
+    lengths = {fold: len(dataset) for fold, dataset in enumerate(test_dataset_folds)}
+    print(f"test datasets per fold and repetition {lengths}")
     result_list = parallel_for(
         evaluate_dataset,
-        inputs=list(itertools.product(dataset_names, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
-                                      n_training_configs, max_runtimes)),
+        #inputs=list(itertools.product(dataset_names, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
+        #                              n_training_configs, max_runtimes)),
+        inputs=list(itertools.product(test_dataset_folds, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
+                     n_training_configs, max_runtimes)),
         context=dict(repo=repo, df_rank=df_rank, rank_scorer=rank_scorer, normalized_scorer=normalized_scorer,
                      model_frameworks=model_frameworks, use_meta_features=use_meta_features),
         engine=engine,
     )
 
-    mean_test_error = np.mean([result_dct["mean_test_error"] for result_dct in result_list])
-    print(f"mean test error for {name}: {mean_test_error:.3f}")
+    mean_test_error = np.mean([result_dct["rmse_test"] for result_dct in result_list])
+    print(f"mean rmse on test for {name}: {mean_test_error:.3f}")
 
     feature_importances = [result_dct["feature_importance_df"] for result_dct in result_list]
     feature_importance_averages = pd.concat(feature_importances).groupby(level=0).mean()
-    save_feature_important_plots(feature_importance_averages[["importance", "stddev", "p_value", "n"]],
+    save_feature_important_plots(df=feature_importance_averages[["importance", "stddev", "p_value", "n"]],
                                  save_path=str(Paths.data_root / "simulation" / expname / f"{name}_feat_imp"),
                                  )
 
-    return [x for result_dct in result_list for x in result_dct["evaluate_configs_result"]]
+    return [row for result_dct in result_list for result_rows_per_dataset in result_dct["evaluate_configs_result"].values() for row in result_rows_per_dataset]

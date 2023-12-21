@@ -76,8 +76,14 @@ def evaluate_configs(
     config_selected = list(sorted(config_selected.copy()))
     dataset = repo.tid_to_dataset(tid=tid)
 
+    # if isinstance(tid, list):
+    #     dataset = [repo.tid_to_dataset(t_ds) for t_ds in tid]
+    # else:
+    #     dataset = repo.tid_to_dataset(tid=tid)
+
     metric_errors, ensemble_weights = repo.evaluate_ensemble(
         datasets=[dataset],
+        # datasets=dataset if isinstance(dataset, list) else [dataset],
         configs=config_selected,
         ensemble_size=ensemble_size,
         backend='native',
@@ -343,9 +349,14 @@ def zeroshot_name(
 
 def filter_configurations_above_budget(repo, test_tid, configs, max_runtime, quantile: float = 0.95):
     # Filter configurations which respects the constrain less than `quantile` fraction of the time
-    assert 0<= quantile <= 1
+    assert 0 <= quantile <= 1
     dd = repo._zeroshot_context.df_configs_ranked
-    dd = dd[dd.tid != test_tid]
+
+    if not isinstance(test_tid, list):
+        test_tid = [test_tid]
+
+    dd = dd[~dd['tid'].isin(test_tid)]
+
     df_configs_runtime = dd.pivot_table(
         index="framework", columns="tid", values="time_train_s"
     ).quantile(q=quantile, axis=1).sort_values()
