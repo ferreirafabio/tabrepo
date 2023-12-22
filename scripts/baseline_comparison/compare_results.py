@@ -49,6 +49,16 @@ def winrate_comparison(df: pd.DataFrame, repo: EvaluationRepository):
     # for time_limit in ["1h", "4h"]:
     for time_limit in ["4h"]:
         frameworks_to_eval_time_limit = [f + f' ({time_limit})' for f in frameworks_to_eval]
+        frameworks_to_eval_time_limit.extend(
+            ["CatBoost (default)",
+             "ExtraTrees (default)",
+             "LightGBM (default)",
+             "MLP (default)",
+             "XGBoost (default)",
+             "RandomForest (default)",
+             ]
+        )
+
         results_ranked_valid, results_ranked_by_dataset_valid, results_ranked_all, results_ranked_by_dataset_all, results_pairs_merged_dict = evaluate(
             results_raw=df_for_eval, frameworks=frameworks_to_eval_time_limit, frameworks_compare_vs_all=[frameworks_to_eval_time_limit[0]],
             columns_to_agg_extra=['time_infer_s']

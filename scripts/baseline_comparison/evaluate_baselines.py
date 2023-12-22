@@ -352,10 +352,10 @@ if __name__ == "__main__":
     )
 
     experiments = [
-        # Experiment(
-        #     expname=expname, name=f"framework-default-{expname}",
-        #     run_fun=lambda: framework_default_results(**experiment_common_kwargs)
-        # ),
+        Experiment(
+            expname=expname, name=f"framework-default-{expname}",
+            run_fun=lambda: framework_default_results(**experiment_common_kwargs)
+        ),
         # Experiment(
         #     expname=expname, name=f"framework-best-{expname}",
         #     run_fun=lambda: framework_best_results(max_runtimes=[3600, 3600 * 4, 3600 * 24], **experiment_common_kwargs),

@@ -10,6 +10,8 @@ import numpy as np
 from dataclasses import dataclass
 import random
 from sklearn.model_selection import KFold
+from scripts.baseline_comparison.meta_learning_utils import minmax_normalize_tasks
+
 
 from sklearn.metrics import mean_squared_error
 from tabrepo.portfolio.zeroshot_selection import zeroshot_configs
@@ -204,8 +206,8 @@ def zeroshot_results_metalearning(
             # },
             # time_limit=1200,
             # time_limit=600,
-            # time_limit=300,
-            time_limit=10,
+            time_limit=300,
+            # time_limit=10,
             # time_limit=30,
             # verbosity=3,
         )
@@ -269,7 +271,12 @@ def zeroshot_results_metalearning(
     # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
 
     # instead of metric_error, let's use the actual task here; also rank them in ascending order
-    df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank()
+    # df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank()
+
+    df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error")
+    df_rank = minmax_normalize_tasks(df_rank)
+    df_rank = df_rank.rank(ascending=True)
+
     # df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank(ascending=False)
     # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
     df_rank.fillna(value=np.nanmax(df_rank.values), inplace=True)

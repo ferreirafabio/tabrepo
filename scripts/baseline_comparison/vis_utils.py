@@ -12,7 +12,8 @@ def save_feature_important_plots(df, save_path):
 
         ax.bar(bar_positions, values, width=bar_width, align='center')  # Adjust the width, color, and alignment of the bars
         ax.set_title(column, fontsize=12)  # Adjust title font size
-        ax.set_ylabel('Values', fontsize=10)  # Adjust y-axis label font size
+        ax.set_ylabel('Values (log scale)', fontsize=10)  # Adjust y-axis label font size
+        ax.set_yscale('log')  # Set the y-axis to log scale
         ax.set_xticks(bar_positions)  # Set the x-tick positions
         ax.set_xticklabels(df.index, rotation=45, fontsize=8, ha='right')  # Rotate x-axis labels and adjust font size
 
