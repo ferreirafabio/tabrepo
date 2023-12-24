@@ -354,10 +354,8 @@ def filter_configurations_above_budget(repo, test_tid, configs, max_runtime, qua
 
     if not isinstance(test_tid, list):
         test_tid = [test_tid]
-        print(test_tid)
 
     dd = dd[~dd['tid'].isin(test_tid)]
-    print(len(dd))
 
     df_configs_runtime = dd.pivot_table(
         index="framework", columns="tid", values="time_train_s"
