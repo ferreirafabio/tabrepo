@@ -319,25 +319,25 @@ def zeroshot_results_metalearning(
         for framework in framework_types
     }
 
-    total_size = len(dataset_names)
-    test_ratio = 0.3
-    n_splits = total_size // int(total_size * test_ratio)
-    kf = KFold(n_splits=n_splits)
-    test_dataset_folds = []
-    for i, (_, test_index) in enumerate(kf.split(X=dataset_names)):
-        test_datasets = [dataset_names[i] for i in test_index]
-        test_dataset_folds.append(test_datasets)
-
-    lengths = {fold: len(dataset) for fold, dataset in enumerate(test_dataset_folds)}
-    print(f"test datasets per fold and repetition {lengths}")
+    # total_size = len(dataset_names)
+    # test_ratio = 0.3
+    # n_splits = total_size // int(total_size * test_ratio)
+    # kf = KFold(n_splits=n_splits)
+    # test_dataset_folds = []
+    # for i, (_, test_index) in enumerate(kf.split(X=dataset_names)):
+    #     test_datasets = [dataset_names[i] for i in test_index]
+    #     test_dataset_folds.append(test_datasets)
+    #
+    # lengths = {fold: len(dataset) for fold, dataset in enumerate(test_dataset_folds)}
+    # print(f"test datasets per fold and repetition {lengths}")
 
     dataset_names_input = [[ds] for ds in dataset_names]
     result_list = parallel_for(
         evaluate_dataset,
-        # inputs=list(itertools.product(dataset_names_input, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
-        #                              n_training_configs, max_runtimes)),
-        inputs=list(itertools.product(test_dataset_folds, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
-                     n_training_configs, max_runtimes)),
+        inputs=list(itertools.product(dataset_names_input, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
+                                     n_training_configs, max_runtimes)),
+        # inputs=list(itertools.product(test_dataset_folds, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
+        #              n_training_configs, max_runtimes)),
         context=dict(repo=repo, df_rank=df_rank, rank_scorer=rank_scorer, normalized_scorer=normalized_scorer,
                      model_frameworks=model_frameworks, use_meta_features=use_meta_features),
         engine=engine,

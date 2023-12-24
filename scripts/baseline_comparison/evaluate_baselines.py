@@ -98,7 +98,10 @@ def plot_figure(df, method_styles: List[MethodStyle], title: str = None, figname
     if title:
         fig.suptitle(title)
     if figname:
-        fig_save_path = figure_path() / f"{figname}.pdf"
+        # fig_save_path = figure_path() / f"{figname}.pdf"
+        # plt.tight_layout()
+        # plt.savefig(fig_save_path)
+        fig_save_path = figure_path() / f"{figname}.png"
         plt.tight_layout()
         plt.savefig(fig_save_path)
     if show:
@@ -171,7 +174,7 @@ def generate_sentitivity_plots(df, show: bool = False):
     fig, axes = plt.subplots(2, 2, sharex='col', sharey='row', figsize=(9, 4))
 
     dimensions = [
-        ("M", "Number of configuration per family"),
+        # ("M", "Number of configuration per family"),
         ("D", "Number of training datasets to fit portfolios"),
     ]
     for i, (dimension, legend) in enumerate(dimensions):
@@ -202,7 +205,8 @@ def generate_sentitivity_plots(df, show: bool = False):
             ax.hlines(df_ag.mean(), xmin=0, xmax=max(dim), color="black", label="AutoGluon", ls="--")
             if i == 1 and j == 0:
                 ax.legend()
-    fig_save_path = figure_path() / f"sensitivity.pdf"
+    # fig_save_path = figure_path() / f"sensitivity.pdf"
+    fig_save_path = figure_path() / f"sensitivity.png"
     plt.tight_layout()
     plt.savefig(fig_save_path)
     if show:
@@ -369,10 +373,10 @@ if __name__ == "__main__":
         #     run_fun=lambda: framework_best_results(framework_types=[None], max_runtimes=[3600, 3600 * 4, 3600 * 24], **experiment_common_kwargs),
         # ),
         # Automl baselines such as Autogluon best, high, medium quality
-        # Experiment(
-        #     expname=expname, name=f"automl-baselines-{expname}",
-        #     run_fun=lambda: automl_results(**experiment_common_kwargs),
-        # ),
+        Experiment(
+            expname=expname, name=f"automl-baselines-{expname}",
+            run_fun=lambda: automl_results(**experiment_common_kwargs),
+        ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-metalearning-{expname}",
         #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
@@ -417,10 +421,10 @@ if __name__ == "__main__":
     #         run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs, **experiment_common_kwargs)
     #     ))
     #
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-{expname}-num-training-datasets-{seed}",
-            run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets, **experiment_common_kwargs)
-        ))
+        # experiments.append(Experiment(
+        #     expname=expname, name=f"zeroshot-{expname}-num-training-datasets-{seed}",
+        #     run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets, **experiment_common_kwargs)
+        # ))
 
         experiments.append(
             Experiment(
@@ -456,8 +460,7 @@ if __name__ == "__main__":
     print(f"Total time of experiments: {total_time_h} hours")
     save_total_runtime_to_file(total_time_h)
 
-
-    #generate_sentitivity_plots(df, show=False)
+    generate_sentitivity_plots(df, show=True)
 
     show_latex_table(df, "all", show_table=True, n_digits=n_digits)
     ag_styles = [
@@ -524,7 +527,8 @@ if __name__ == "__main__":
         )
         for i, size in enumerate(n_training_datasets)
     ]
-    plot_figure(df, method_styles, title="Effect of number of training tasks", figname="cdf-n-training-datasets")
+    # plot_figure(df, method_styles, title="Effect of number of training tasks", figname="cdf-n-training-datasets")
+    plot_figure(df, method_styles, title="Effect of number of training tasks", figname="cdf-n-training-datasets", show=True)
 
     # # Plot effect number of training fold
     # method_styles = ag_styles + [
@@ -600,4 +604,4 @@ if __name__ == "__main__":
 
     # plot_critical_diagrams(df)
 
-    winrate_comparison(df=df, repo=repo)
+    # winrate_comparison(df=df, repo=repo)
