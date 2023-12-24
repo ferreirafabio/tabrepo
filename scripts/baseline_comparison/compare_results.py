@@ -50,12 +50,13 @@ def winrate_comparison(df: pd.DataFrame, repo: EvaluationRepository):
     for time_limit in ["4h"]:
         frameworks_to_eval_time_limit = [f + f' ({time_limit})' for f in frameworks_to_eval]
         frameworks_to_eval_time_limit.extend(
-            ["CatBoost (default)",
-             "ExtraTrees (default)",
-             "LightGBM (default)",
-             "MLP (default)",
-             "XGBoost (default)",
-             "RandomForest (default)",
+            [
+                "CatBoost (default)",
+                 "ExtraTrees (default)",
+                 "LightGBM (default)",
+                 # "MLP (default)",
+                 "XGBoost (default)",
+                 # "RandomForest (default)",
              ]
         )
 

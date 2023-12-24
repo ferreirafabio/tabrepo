@@ -354,8 +354,10 @@ def filter_configurations_above_budget(repo, test_tid, configs, max_runtime, qua
 
     if not isinstance(test_tid, list):
         test_tid = [test_tid]
+        print(test_tid)
 
     dd = dd[~dd['tid'].isin(test_tid)]
+    print(len(dd))
 
     df_configs_runtime = dd.pivot_table(
         index="framework", columns="tid", values="time_train_s"
@@ -382,7 +384,9 @@ def zeroshot_results(
         n_training_configs: List[int] = [None],
         max_runtimes: List[float] = [default_runtime],
         engine: str = "ray",
-        use_meta_features: bool = True,
+        **kwargs,
+        # use_meta_features: bool = True, # not used
+        # loss: str = "metric_error" # not used
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot

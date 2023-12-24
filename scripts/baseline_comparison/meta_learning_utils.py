@@ -15,3 +15,9 @@ def minmax_normalize_tasks(df):
         normalized_df[task_columns] = normalized_values
 
     return normalized_df
+
+
+def print_arguments(**kwargs):
+    print("Arguments:")
+    for key, value in kwargs.items():
+        print(f"{key}={value}")

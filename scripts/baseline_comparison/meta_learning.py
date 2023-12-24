@@ -25,6 +25,7 @@ from tabrepo.utils.meta_features import get_meta_features
 from tabrepo.utils.parallel_for import parallel_for
 from autogluon.tabular import TabularPredictor
 from scripts.baseline_comparison.vis_utils import save_feature_important_plots
+from scripts.baseline_comparison.meta_learning_utils import print_arguments
 from tabrepo.loaders import Paths
 
 from scripts.baseline_comparison.baselines import (
@@ -58,6 +59,7 @@ def zeroshot_results_metalearning(
         use_meta_features: bool = True,
         name: str = "",
         expname: str = "",
+        loss: str = "metric_error",
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -71,6 +73,7 @@ def zeroshot_results_metalearning(
     :param engine: engine to use, must be "sequential", "joblib" or "ray"
     :return: evaluation obtained on all combinations
     """
+    print_arguments(**locals())
 
     def evaluate_dataset(test_datasets, n_portfolio, n_ensemble, n_training_dataset, n_training_fold, n_training_config,
                          max_runtime, repo: EvaluationRepository, df_rank, rank_scorer, normalized_scorer,
@@ -84,7 +87,7 @@ def zeroshot_results_metalearning(
             n_training_config=n_training_config,
             name_suffix=" metalearning",
         )
-
+        _n_training_dataset = n_training_dataset
         # restrict number of evaluation fold
         if n_training_fold is None:
             n_training_fold = n_eval_folds
@@ -130,20 +133,21 @@ def zeroshot_results_metalearning(
 
         # get meta features
         # all_featueres = repo._df_metadata.columns.tolist()
-        meta_features_selected = ["dataset",  # maps to problem_type
-                                  # "tid",
-                                  "MajorityClassSize",
-                                  "MaxNominalAttDistinctValues",
-                                  "MinorityClassSize",
-                                  "NumberOfClasses",
-                                  "NumberOfFeatures",
-                                  "NumberOfInstances",
-                                  "NumberOfInstancesWithMissingValues",
-                                  "NumberOfMissingValues",
-                                  "NumberOfSymbolicFeatures",
-                                  "NumberOfNumericFeatures",
-                                  # "number_samples",  # is nan
-                                  ]
+        meta_features_selected = [
+            "dataset",  # maps to problem_type
+            # "tid",
+            "MajorityClassSize",
+            "MaxNominalAttDistinctValues",
+            "MinorityClassSize",
+            "NumberOfClasses",
+            "NumberOfFeatures",
+            "NumberOfInstances",
+            "NumberOfInstancesWithMissingValues",
+            "NumberOfMissingValues",
+            "NumberOfSymbolicFeatures",
+            "NumberOfNumericFeatures",
+            # "number_samples",  # is nan
+            ]
 
         df_meta_features_train, df_meta_features_test = get_meta_features(repo,
                                                                           n_eval_folds,
@@ -160,7 +164,18 @@ def zeroshot_results_metalearning(
         # create meta train / test splits
         train_mask = df_rank_all["task"].isin(train_tasks)
         df_rank_train = df_rank_all[train_mask].drop(columns=["task"])
-        df_rank_test = df_rank_all[~train_mask].drop(columns=["task"])
+
+        # n_training_datasets is not None when we do dataset size analysis in which case we
+        # do not take the negated mask as test data but the tid given
+        if _n_training_dataset is None:
+            df_rank_test = df_rank_all[~train_mask].drop(columns=["task"])
+        else:
+            test_tasks = []
+            for task in df_rank.columns:
+                tid, fold = task.split("_")
+                if int(tid) in test_tids and int(fold) < n_training_fold:
+                    test_tasks.append(task)
+            df_rank_test = df_rank_all[df_rank_all["task"].isin(test_tasks)].drop(columns=["task"])
 
         df_rank_train = df_rank_train.groupby(["framework", "dataset"])["rank"].mean()
         df_rank_train = df_rank_train.reset_index(drop=False)
@@ -175,19 +190,9 @@ def zeroshot_results_metalearning(
         # df_rank_test.rename(columns={"mean": "rank", "std": "std_dev_rank"}, inplace=True)
 
         if use_meta_features:
-            # only use framework (without dataset) + rank
-            # df_rank_train = df_rank_train[["framework", "rank"]].groupby(["framework"])["rank"].mean()
-            # df_rank_train = df_rank_train.reset_index(drop=False)
-            # df_rank_test = df_rank_test[["framework", "rank"]].groupby(["framework"])["rank"].mean()
-            # df_rank_test = df_rank_test.reset_index(drop=False)
-
             # merge meta features into the performance data
             train_meta = df_rank_train.merge(df_meta_features_train, on=["dataset"])
             test_meta = df_rank_test.merge(df_meta_features_test, on=["dataset"])
-            # quick sanity check: see if test_tid is in train data
-            # t_ds = np.random.choice(test_tids)
-            # assert not any(str(value) == (str(repo.tid_to_dataset(t_ds))) for value in train_meta['dataset']), \
-            #     print(f"test dataset {str(repo.tid_to_dataset(t_ds))} seems to be in the train data")
         else:
             # deactivated meta features (-> in an AG-learned version of zero-shot)
             train_meta = df_rank_train
@@ -195,6 +200,20 @@ def zeroshot_results_metalearning(
 
         train_meta.drop(['dataset'], axis=1, inplace=True)
         test_meta_new = test_meta.drop(['dataset'], axis=1)
+
+        # print("-------------meta-feature ablation study-----------------")
+        # # meta_features_to_consider = ["rank", "framework"]
+        # # meta_features_to_consider = ["rank", "problem_type"]
+        # # meta_features_to_consider = ["rank", "MinorityClassSize"]
+        # # meta_features_to_consider = ["rank", "framework", "MinorityClassSize"]
+        # # meta_features_to_consider = ["rank", "framework", "problem_type"]
+        # # meta_features_to_consider = ["rank", "framework", "MinorityClassSize", "problem_type"]
+        # meta_features_to_consider = ["rank", "framework", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize"]
+        # train_meta.drop(columns=train_meta.columns.difference(meta_features_to_consider), inplace=True)
+        # test_meta_new.drop(columns=test_meta_new.columns.difference(meta_features_to_consider), inplace=True)
+        # print(f"remaining columns train: {list(train_meta.columns)}")
+        # print(f"remaining columns test: {list(test_meta_new.columns)}")
+
         # test_meta.drop(['std_dev_rank'], axis=1, inplace=True)
 
         predictor = TabularPredictor(label="rank").fit(
@@ -204,6 +223,7 @@ def zeroshot_results_metalearning(
             # "DUMMY": {},
             # "GBM": {},
             # },
+            # time_limit=7200,
             # time_limit=1200,
             # time_limit=600,
             time_limit=300,
@@ -271,13 +291,25 @@ def zeroshot_results_metalearning(
     # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
 
     # instead of metric_error, let's use the actual task here; also rank them in ascending order
-    # df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank()
+    assert loss in ["metric_error", "metric_error_val", "rank"]
+    if loss == "rank":
+        df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank(ascending=True)
+        print("using unnormalized rank as objective")
+    elif loss == "metric_error":
+        df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error")
+        df_rank = minmax_normalize_tasks(df_rank)
+        df_rank = df_rank.rank(ascending=True)
+        print("using task-normalized metric_error")
+    elif loss == "metric_error_val":
+        df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error_val")
+        df_rank = minmax_normalize_tasks(df_rank)
+        df_rank = df_rank.rank(ascending=True)
+        print("using task-normalized metric_error_val")
+    else:
+        import sys
+        print("loss not supported")
+        sys.exit()
 
-    df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error")
-    df_rank = minmax_normalize_tasks(df_rank)
-    df_rank = df_rank.rank(ascending=True)
-
-    # df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank(ascending=False)
     # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
     df_rank.fillna(value=np.nanmax(df_rank.values), inplace=True)
     assert not any(df_rank.isna().values.reshape(-1))
@@ -298,9 +330,11 @@ def zeroshot_results_metalearning(
 
     lengths = {fold: len(dataset) for fold, dataset in enumerate(test_dataset_folds)}
     print(f"test datasets per fold and repetition {lengths}")
+
+    dataset_names_input = [[ds] for ds in dataset_names]
     result_list = parallel_for(
         evaluate_dataset,
-        #inputs=list(itertools.product(dataset_names, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
+        # inputs=list(itertools.product(dataset_names_input, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
         #                              n_training_configs, max_runtimes)),
         inputs=list(itertools.product(test_dataset_folds, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
                      n_training_configs, max_runtimes)),
@@ -312,10 +346,12 @@ def zeroshot_results_metalearning(
     mean_test_error = np.mean([result_dct["rmse_test"] for result_dct in result_list])
     print(f"mean rmse on test for {name}: {mean_test_error:.3f}")
 
-    feature_importances = [result_dct["feature_importance_df"] for result_dct in result_list]
-    feature_importance_averages = pd.concat(feature_importances).groupby(level=0).mean()
-    save_feature_important_plots(df=feature_importance_averages[["importance", "stddev", "p_value", "n"]],
-                                 save_path=str(Paths.data_root / "simulation" / expname / f"{name}_feat_imp"),
-                                 )
+    if n_training_datasets is not None:
+        # n_training_datasets is not None when we do dataset size analysis in which case we deactivate feature importance
+        feature_importances = [result_dct["feature_importance_df"] for result_dct in result_list]
+        feature_importance_averages = pd.concat(feature_importances).groupby(level=0).mean()
+        save_feature_important_plots(df=feature_importance_averages[["importance", "stddev", "p_value", "n"]],
+                                     save_path=str(Paths.data_root / "simulation" / expname / f"{name}_feat_imp"),
+                                     )
 
     return [row for result_dct in result_list for result_rows_per_dataset in result_dct["evaluate_configs_result"].values() for row in result_rows_per_dataset]
