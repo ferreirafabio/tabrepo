@@ -8,6 +8,7 @@ import hashlib
 from typing import List, Optional, Tuple
 import random
 import contextlib
+from scripts.baseline_comparison.meta_learning_utils import minmax_normalize_tasks, print_arguments
 
 from AutoFolio.autofolio.facade.af_csv_facade import AFCsvFacade
 
@@ -64,6 +65,7 @@ def zeroshot_results_metalearning(
         max_runtimes: List[float] = [default_runtime],
         engine: str = "ray",
         use_meta_features: bool = True,
+        loss: str = "metric_error",
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -77,6 +79,7 @@ def zeroshot_results_metalearning(
     :param engine: engine to use, must be "sequential", "joblib" or "ray"
     :return: evaluation obtained on all combinations
     """
+    print_arguments(**locals())
 
     def evaluate_dataset(test_dataset, n_portfolio, n_ensemble, n_training_dataset, n_training_fold, n_training_config,
                          max_runtime, repo: EvaluationRepository, df_rank, rank_scorer, normalized_scorer,
@@ -156,46 +159,16 @@ def zeroshot_results_metalearning(
         df_rank_all = df_rank.stack().reset_index(name='rank')
         df_rank_all["dataset"] = df_rank_all["task"].apply(repo.task_to_dataset)
 
-        # df_rank_new = df_rank_new.groupby(["framework", "dataset", "task"])["rank"].mean()
-        # df_rank_new = df_rank_new.reset_index(drop=False)
-
         # create meta train / test splits
         train_mask = df_rank_all["task"].isin(train_tasks)
         df_rank_train = df_rank_all[train_mask].drop(columns=["task"])
         df_rank_test = df_rank_all[~train_mask].drop(columns=["task"])
 
-        # df_rank_train = df_rank_train.groupby(["framework", "dataset"])["rank"].mean()
-        # df_rank_train = df_rank_train.reset_index(drop=False)
+        df_rank_train = df_rank_train.groupby(["framework", "dataset"])["rank"].mean()
+        df_rank_train = df_rank_train.reset_index(drop=False)
 
-        # additionally provide the std deviation
-        df_rank_train = df_rank_train.groupby(["framework", "dataset"])["rank"].agg(['mean', 'std']).reset_index()
-        df_rank_train.rename(columns={"mean": "rank", "std": "std_dev_rank"}, inplace=True)
-
-        # df_rank_test = df_rank_test.groupby(["framework", "dataset"])["rank"].mean()
-        # df_rank_test = df_rank_test.reset_index(drop=False)
-        df_rank_test = df_rank_test.groupby(["framework", "dataset"])["rank"].agg(['mean', 'std']).reset_index()
-        df_rank_test.rename(columns={"mean": "rank", "std": "std_dev_rank"}, inplace=True)
-
-        # if use_meta_features:
-        #     # only use framework (without dataset) + rank
-        #     # df_rank_train = df_rank_train[["framework", "rank"]].groupby(["framework"])["rank"].mean()
-        #     # df_rank_train = df_rank_train.reset_index(drop=False)
-        #     # df_rank_test = df_rank_test[["framework", "rank"]].groupby(["framework"])["rank"].mean()
-        #     # df_rank_test = df_rank_test.reset_index(drop=False)
-        #
-        #     # merge meta features into the performance data
-        #     train_meta = df_rank_train.merge(df_meta_features_train, on=["dataset"])
-        #     test_meta = df_rank_test.merge(df_meta_features_test, on=["dataset"])
-        #     # quick sanity check: see if test_tid is in train data
-        #     assert not any(str(value) == (str(repo.tid_to_dataset(test_tid))) for value in train_meta['dataset']), \
-        #         print(f"test dataset {str(repo.tid_to_dataset(test_tid))} seems to be in the train data")
-        # else:
-        #     # deactivated meta features (-> in an AG-learned version of zero-shot)
-        #     train_meta = df_rank_train
-        #     test_meta = df_rank_test
-        #
-        # train_meta.drop(['dataset'], axis=1, inplace=True)
-        # test_meta.drop(['dataset'], axis=1, inplace=True)
+        df_rank_test = df_rank_test.groupby(["framework", "dataset"])["rank"].mean()
+        df_rank_test = df_rank_test.reset_index(drop=False)
 
         try:
             hsh = generate_worker_hash()
@@ -207,21 +180,12 @@ def zeroshot_results_metalearning(
                 os.makedirs(new_directory_path)
 
             # performance matrix: (column: algorithm, row: instance, delimeter: ,)
-            df_rank_train.drop(["std_dev_rank"], axis=1, inplace=True)
             df_rank_train = df_rank_train.pivot(index="dataset", columns="framework", values="rank")
-
-            # to speedup fitting, drop some algos
-            # columns_to_drop = random.sample(df_rank_train.columns.tolist(), 1000)
-            # df_rank_train = df_rank_train.drop(columns_to_drop, axis=1)
 
             # df_rank_train.to_csv("perf.csv")
             df_rank_train.to_csv(f"as_files/perf_{hsh}.csv", index=True, index_label="")  # to match AF example 1:1
 
-            df_rank_test.drop(["std_dev_rank"], axis=1, inplace=True)
-            df_rank_test = df_rank_test.pivot(index="dataset", columns="framework", values="rank")
-
-            # only needed for speedup!!!!!
-            # df_rank_test = df_rank_test.drop(columns_to_drop, axis=1)
+            # df_rank_test = df_rank_test.pivot(index="dataset", columns="framework", values="rank")
 
             # feature matrix: (column: features, row: instance, delimeter: ,)
             # df_meta_features_train.drop(["dataset"], axis=1, inplace=True)
@@ -336,9 +300,25 @@ def zeroshot_results_metalearning(
     # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
 
     # instead of metric_error, let's use the actual task here; also rank them in ascending order
-    df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank()
-    # df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank(ascending=False)
-    # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
+    assert loss in ["metric_error", "metric_error_val", "rank"]
+    if loss == "rank":
+        df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank(ascending=True)
+        print("using unnormalized rank as objective")
+    elif loss == "metric_error":
+        df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error")
+        df_rank = minmax_normalize_tasks(df_rank)
+        df_rank = df_rank.rank(ascending=True)
+        print("using task-normalized metric_error")
+    elif loss == "metric_error_val":
+        df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error_val")
+        df_rank = minmax_normalize_tasks(df_rank)
+        df_rank = df_rank.rank(ascending=True)
+        print("using task-normalized metric_error_val")
+    else:
+        import sys
+        print("loss not supported")
+        sys.exit()
+
     df_rank.fillna(value=np.nanmax(df_rank.values), inplace=True)
     assert not any(df_rank.isna().values.reshape(-1))
 

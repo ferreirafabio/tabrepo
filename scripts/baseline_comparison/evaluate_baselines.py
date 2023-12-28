@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import matplotlib
 from pathlib import Path
-
+import random
 from autogluon.common.savers import save_pd
 from dataclasses import dataclass
 
@@ -255,7 +255,7 @@ def generate_selected_config_hist_plots(df):
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416_30")
+    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416")
     parser.add_argument("--n_folds", type=int, default=-1, required=False,
                         help="Number of folds to consider when evaluating all baselines. Uses all if set to -1.")
     parser.add_argument("--n_datasets", type=int, required=False, help="Number of datasets to consider when evaluating all baselines.")
@@ -268,6 +268,9 @@ if __name__ == "__main__":
                         help="The ratio of ray processes to logical cpu cores. Use lower values to reduce memory usage. Only used if engine == 'ray'",)
     parser.add_argument("--deactivate_meta_features", action="store_true",
                         help="Ignore all meta features")
+    parser.add_argument("--loss", type=str, help="loss (metric_error, metric_error_val, rank)", default="metric_error")
+    parser.add_argument("--n_configs_per_framework", type=int, required=False,
+                        help="Number of total configs per family to consider")
     args = parser.parse_args()
     print(args.__dict__)
 
@@ -279,6 +282,8 @@ if __name__ == "__main__":
     n_datasets = args.n_datasets
     as_paper = not args.all_configs
     use_meta_features = not args.deactivate_meta_features
+    loss = args.loss
+    n_configs_per_framework = args.n_configs_per_framework
 
     if n_datasets:
         expname += f"-{n_datasets}"
@@ -336,6 +341,14 @@ if __name__ == "__main__":
     configs_default = [c for c in repo.configs() if "_c1_" in c]
     framework_types = [c.rsplit('_c1_', 1)[0] for c in configs_default]
 
+    # optional; intended to limit computation resources when using AFs pairwise classifiers
+    if n_configs_per_framework:
+        grouped_configs = {fw: [cfg for cfg in repo.configs() if cfg.startswith(fw)] for fw in framework_types}
+        sampled_configs = [sampled_cfgs for framework_cfgs in grouped_configs.values() for sampled_cfgs in
+                           random.sample(framework_cfgs, min(n_configs_per_framework, len(framework_cfgs)))]
+
+        repo = repo.subset(configs=sampled_configs)
+
     # TODO: removing XGBoost, LightGBM for now to speed-up AutoFolio (603 configs)
     # framework_types.remove("XGBoost")
     # framework_types.remove("LightGBM")
@@ -371,22 +384,22 @@ if __name__ == "__main__":
         #     expname=expname, name=f"automl-baselines-{expname}",
         #     run_fun=lambda: automl_results(**experiment_common_kwargs),
         # ),
-        Experiment(
-            expname=expname, name=f"zeroshot-metalearning-{expname}",
-            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs)
-        ),
-        Experiment(
-            expname=expname, name=f"zeroshot-{expname}",
-            run_fun=lambda: zeroshot_results(**experiment_common_kwargs)
-        ),
         # Experiment(
-        #     expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
-        #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs, n_portfolios=[1])
+        #     expname=expname, name=f"zeroshot-metalearning-{expname}",
+        #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs)
         # ),
         # Experiment(
-        #     expname=expname, name=f"zeroshot-singlebest-{expname}",
-        #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
+        #     expname=expname, name=f"zeroshot-{expname}",
+        #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs)
         # ),
+        Experiment(
+            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
+            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs, n_portfolios=[1])
+        ),
+        Experiment(
+            expname=expname, name=f"zeroshot-singlebest-{expname}",
+            run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
+        ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-maxruntimes",
         #     run_fun=lambda: zeroshot_results(max_runtimes=max_runtimes, **experiment_common_kwargs)
@@ -581,4 +594,4 @@ if __name__ == "__main__":
 
     # plot_critical_diagrams(df)
 
-    winrate_comparison(df=df, repo=repo)
+    # winrate_comparison(df=df, repo=repo)
