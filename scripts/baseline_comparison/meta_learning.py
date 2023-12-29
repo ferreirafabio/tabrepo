@@ -10,7 +10,7 @@ import numpy as np
 from dataclasses import dataclass
 import random
 from sklearn.model_selection import KFold
-from scripts.baseline_comparison.meta_learning_utils import minmax_normalize_tasks
+from scripts.baseline_comparison.meta_learning_utils import minmax_normalize_tasks, print_arguments
 
 
 from sklearn.metrics import mean_squared_error
@@ -25,7 +25,6 @@ from tabrepo.utils.meta_features import get_meta_features
 from tabrepo.utils.parallel_for import parallel_for
 from autogluon.tabular import TabularPredictor
 from scripts.baseline_comparison.vis_utils import save_feature_important_plots
-from scripts.baseline_comparison.meta_learning_utils import print_arguments
 from tabrepo.loaders import Paths
 
 from scripts.baseline_comparison.baselines import (
@@ -150,16 +149,12 @@ def zeroshot_results_metalearning(
             ]
 
         df_meta_features_train, df_meta_features_test = get_meta_features(repo,
-                                                                          n_eval_folds,
                                                                           meta_features_selected,
                                                                           selected_tids
                                                                           )
 
         df_rank_all = df_rank.stack().reset_index(name='rank')
         df_rank_all["dataset"] = df_rank_all["task"].apply(repo.task_to_dataset)
-
-        # df_rank_new = df_rank_new.groupby(["framework", "dataset", "task"])["rank"].mean()
-        # df_rank_new = df_rank_new.reset_index(drop=False)
 
         # create meta train / test splits
         train_mask = df_rank_all["task"].isin(train_tasks)
@@ -180,14 +175,8 @@ def zeroshot_results_metalearning(
         df_rank_train = df_rank_train.groupby(["framework", "dataset"])["rank"].mean()
         df_rank_train = df_rank_train.reset_index(drop=False)
 
-        # additionally provide the std deviation
-        # df_rank_train = df_rank_train.groupby(["framework", "dataset"])["rank"].agg(['mean', 'std']).reset_index()
-        # df_rank_train.rename(columns={"mean": "rank", "std": "std_dev_rank"}, inplace=True)
-
         df_rank_test = df_rank_test.groupby(["framework", "dataset"])["rank"].mean()
         df_rank_test = df_rank_test.reset_index(drop=False)
-        # df_rank_test = df_rank_test.groupby(["framework", "dataset"])["rank"].agg(['mean', 'std']).reset_index()
-        # df_rank_test.rename(columns={"mean": "rank", "std": "std_dev_rank"}, inplace=True)
 
         if use_meta_features:
             # merge meta features into the performance data
@@ -202,13 +191,43 @@ def zeroshot_results_metalearning(
         test_meta_new = test_meta.drop(['dataset'], axis=1)
 
         # print("-------------meta-feature ablation study-----------------")
-        # # meta_features_to_consider = ["rank", "framework"]
+        # # 1 feature
+        # # meta_features_to_consider = ["rank", "NumberOfMissingValues"]
+        # # 3 features
+        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize"]
+        # # 5 features
+        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues"]
+        # 8 features
+        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures"]
+        # 12 features --> done
+        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type", "MinorityClassSize", "framework"]
+        # train_meta.drop(columns=train_meta.columns.difference(meta_features_to_consider), inplace=True)
+        # test_meta_new.drop(columns=test_meta_new.columns.difference(meta_features_to_consider), inplace=True)
+        # print(f"remaining columns train: {list(train_meta.columns)}")
+        # print(f"remaining columns test: {list(test_meta_new.columns)}")
+
+        # meta_features_to_consider = ["rank", "framework"]
         # # meta_features_to_consider = ["rank", "problem_type"]
         # # meta_features_to_consider = ["rank", "MinorityClassSize"]
         # # meta_features_to_consider = ["rank", "framework", "MinorityClassSize"]
-        # # meta_features_to_consider = ["rank", "framework", "problem_type"]
+        # meta_features_to_consider = ["rank", "framework", "problem_type"]
         # # meta_features_to_consider = ["rank", "framework", "MinorityClassSize", "problem_type"]
         # meta_features_to_consider = ["rank", "framework", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize"]
+        # meta_features_to_consider = [
+        #             "rank",
+        #             "problem_type",
+        #             "MajorityClassSize",
+        #             "MaxNominalAttDistinctValues",
+        #             "MinorityClassSize",
+        #             "NumberOfClasses",
+        #             "NumberOfFeatures",
+        #             "NumberOfInstances",
+        #             "NumberOfInstancesWithMissingValues",
+        #             "NumberOfMissingValues",
+        #             "NumberOfSymbolicFeatures",
+        #             "NumberOfNumericFeatures",
+        #             ]
+
         # train_meta.drop(columns=train_meta.columns.difference(meta_features_to_consider), inplace=True)
         # test_meta_new.drop(columns=test_meta_new.columns.difference(meta_features_to_consider), inplace=True)
         # print(f"remaining columns train: {list(train_meta.columns)}")
@@ -225,18 +244,19 @@ def zeroshot_results_metalearning(
             # },
             # time_limit=7200,
             # time_limit=1200,
-            # time_limit=600,
-            time_limit=300,
+            time_limit=600,
+            # time_limit=300,
             # time_limit=10,
             # time_limit=30,
-            # verbosity=3,
+            verbosity=3,
         )
         predictor.leaderboard(display=True)
 
         # run predict to get the portfolio
         ranks = predictor.predict(test_meta_new)
         rmse_test = np.sqrt(mean_squared_error(test_meta["rank"], ranks))
-        feature_importance_df = predictor.feature_importance(test_meta)
+        # feature_importance_df = predictor.feature_importance(test_meta_new)
+        feature_importance_df = None
 
         all_config_results_per_ds, all_portfolios_per_ds = {}, {}
         all_predicted_ranks_all_datasets = pd.concat([ranks, test_meta["dataset"], test_meta["framework"]], axis=1)
@@ -346,12 +366,12 @@ def zeroshot_results_metalearning(
     mean_test_error = np.mean([result_dct["rmse_test"] for result_dct in result_list])
     print(f"mean rmse on test for {name}: {mean_test_error:.3f}")
 
-    if n_training_datasets is not None:
-        # n_training_datasets is not None when we do dataset size analysis in which case we deactivate feature importance
-        feature_importances = [result_dct["feature_importance_df"] for result_dct in result_list]
-        feature_importance_averages = pd.concat(feature_importances).groupby(level=0).mean()
-        save_feature_important_plots(df=feature_importance_averages[["importance", "stddev", "p_value", "n"]],
-                                     save_path=str(Paths.data_root / "simulation" / expname / f"{name}_feat_imp"),
-                                     )
+    # if n_training_datasets is not None:
+    #     # n_training_datasets is not None when we do dataset size analysis in which case we deactivate feature importance
+    #     feature_importances = [result_dct["feature_importance_df"] for result_dct in result_list]
+    #     feature_importance_averages = pd.concat(feature_importances).groupby(level=0).mean()
+    #     save_feature_important_plots(df=feature_importance_averages[["importance", "stddev", "p_value", "n"]],
+    #                                  save_path=str(Paths.data_root / "simulation" / expname / f"{name}_feat_imp"),
+    #                                  )
 
     return [row for result_dct in result_list for result_rows_per_dataset in result_dct["evaluate_configs_result"].values() for row in result_rows_per_dataset]
