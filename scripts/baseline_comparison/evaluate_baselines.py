@@ -18,6 +18,9 @@ from tabrepo.utils.cache import cache_function, cache_function_dataframe
 from tabrepo.utils.normalized_scorer import NormalizedScorer
 from tabrepo.utils.rank_utils import RankScorer
 
+
+
+
 from scripts import output_path, load_context
 from scripts.baseline_comparison.baselines import (
     automl_results,
@@ -33,6 +36,7 @@ from scripts.baseline_comparison.baselines import (
 )
 
 from scripts.baseline_comparison.meta_learning import zeroshot_results_metalearning
+from tabrepo.utils.meta_features import load_extended_meta_features
 
 from scripts.baseline_comparison.compare_results import winrate_comparison
 from scripts.baseline_comparison.plot_utils import (
@@ -176,7 +180,7 @@ def generate_sentitivity_plots(df, show: bool = False):
     # fig, axes = plt.subplots(2, 1, sharex='col', sharey='row', figsize=(9, 4))
 
     dimensions = [
-        # ("M", "Number of configuration per family"),
+        ("M", "Number of configuration per family"),
         ("D", "Number of training datasets to fit portfolios"),
     ]
     for i, (dimension, legend) in enumerate(dimensions):
@@ -222,9 +226,9 @@ def generate_sentitivity_plots(df, show: bool = False):
             ax.hlines(df_ag.mean(), xmin=0, xmax=max(dim), color="black", label="AutoGluon", ls="--")
             if i == 1 and j == 0:
                 ax.legend()
-            axes[i][j].set_title("100 configs per framework, time_limit=600")
+            # axes[i][j].set_title("100 configs per framework, time_limit=600")
     # fig_save_path = figure_path() / f"sensitivity.pdf"
-    # fig.suptitle("25 configs per framework, time_limit=600")
+    fig.suptitle("9 meta-features, time_limit=600")
     fig_save_path = figure_path() / f"sensitivity.png"
     plt.tight_layout()
     plt.savefig(fig_save_path)
@@ -294,6 +298,16 @@ if __name__ == "__main__":
     parser.add_argument("--loss", type=str, help="loss (metric_error, metric_error_val, rank)", default="metric_error")
     parser.add_argument("--n_configs_per_framework", type=int, required=False,
                         help="Number of total configs per family to consider")
+    parser.add_argument("--extended_mf_general", action="store_true",
+                        help="Use general meta features")
+    parser.add_argument("--extended_mf_statistical", action="store_true",
+                        help="Use statistical meta features")
+    parser.add_argument("--extended_mf_info_theory", action="store_true",
+                        help="Use information-theoretic meta features")
+    parser.add_argument("--extended_mf_model_based", action="store_true",
+                        help="Use model-based meta features")
+    parser.add_argument("--extended_mf_landmarking", action="store_true",
+                        help="Use landmarking meta features")
     args = parser.parse_args()
     print(args.__dict__)
 
@@ -361,10 +375,6 @@ if __name__ == "__main__":
     if n_datasets:
         dataset_names = dataset_names[:n_datasets]
 
-    # TODO: filter configs for AutoFolio (put this in AF branch)
-    # repo.configs()
-    # repo = repo.subset(configs=)
-
     # TODO: This is a hack, in future repo should know the framework_types via the configs.json input
     configs_default = [c for c in repo.configs() if "_c1_" in c]
     framework_types = [c.rsplit('_c1_', 1)[0] for c in configs_default]
@@ -376,6 +386,8 @@ if __name__ == "__main__":
                            random.sample(framework_cfgs, min(n_configs_per_framework, len(framework_cfgs)))]
 
         repo = repo.subset(configs=sampled_configs)
+
+    repo = load_extended_meta_features(repo, args)
 
     experiment_common_kwargs = dict(
         repo=repo,
@@ -403,10 +415,10 @@ if __name__ == "__main__":
         #     run_fun=lambda: framework_best_results(framework_types=[None], max_runtimes=[3600, 3600 * 4, 3600 * 24], **experiment_common_kwargs),
         # ),
         # Automl baselines such as Autogluon best, high, medium quality
-        Experiment(
-            expname=expname, name=f"automl-baselines-{expname}",
-            run_fun=lambda: automl_results(**experiment_common_kwargs),
-        ),
+        # Experiment(
+        #     expname=expname, name=f"automl-baselines-{expname}",
+        #     run_fun=lambda: automl_results(**experiment_common_kwargs),
+        # ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-metalearning-{expname}",
         #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
@@ -418,18 +430,18 @@ if __name__ == "__main__":
         #     expname=expname, name=f"zeroshot-{expname}",
         #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs)
         # ),
-        # Experiment(
-        #     expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
-        #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
-        #                                                   n_portfolios=[1],
-        #                                                   name=f"zeroshot-metalearning-singlebest-{expname}",
-        #                                                   expname=expname,
-        #                                                   )
-        # ),
-        # Experiment(
-        #     expname=expname, name=f"zeroshot-singlebest-{expname}",
-        #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
-        # ),
+        Experiment(
+            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
+            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
+                                                          n_portfolios=[1],
+                                                          name=f"zeroshot-metalearning-singlebest-{expname}",
+                                                          expname=expname,
+                                                          )
+        ),
+        Experiment(
+            expname=expname, name=f"zeroshot-singlebest-{expname}",
+            run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
+        ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-maxruntimes",
         #     run_fun=lambda: zeroshot_results(max_runtimes=max_runtimes, **experiment_common_kwargs)
@@ -445,7 +457,7 @@ if __name__ == "__main__":
     ]
 
     # Use more seeds
-    for seed in range(n_seeds):
+    # for seed in range(n_seeds):
     #     experiments.append(Experiment(
     #         expname=expname, name=f"zeroshot-{expname}-num-configs-{seed}",
     #         run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs, **experiment_common_kwargs)
@@ -456,44 +468,44 @@ if __name__ == "__main__":
         #     run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets, **experiment_common_kwargs)
         # ))
 
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-singlebest-{expname}-num-configs-{seed}",
-            run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs,
-                                             n_portfolios=[1],
-                                             **experiment_common_kwargs,
-                                             )
-        ))
-
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-singlebest-{expname}-num-training-datasets-{seed}",
-            run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets,
-                                             n_portfolios=[1],
-                                             **experiment_common_kwargs,
-                                             )
-        ))
-
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-configs-{seed}",
-            run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[1],
-                                                          n_training_configs=n_training_configs,
-                                                          name=f"zeroshot-metalearning-singlebest-{expname}",
-                                                          expname=expname,
-                                                          **experiment_common_kwargs,
-                                                          )
-        ))
-
-        experiments.append(
-            Experiment(
-                expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-training-datasets-{seed}",
-                run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[1],
-                                                              n_training_datasets=n_training_datasets,
-                                                              name=f"zeroshot-metalearning-singlebest-{expname}",
-                                                              expname=expname,
-                                                              **experiment_common_kwargs,
-                                                              )
-            ),
-
-        )
+        # experiments.append(Experiment(
+        #     expname=expname, name=f"zeroshot-singlebest-{expname}-num-configs-{seed}",
+        #     run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs,
+        #                                      n_portfolios=[1],
+        #                                      **experiment_common_kwargs,
+        #                                      )
+        # ))
+        #
+        # experiments.append(Experiment(
+        #     expname=expname, name=f"zeroshot-singlebest-{expname}-num-training-datasets-{seed}",
+        #     run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets,
+        #                                      n_portfolios=[1],
+        #                                      **experiment_common_kwargs,
+        #                                      )
+        # ))
+        #
+        # experiments.append(Experiment(
+        #     expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-configs-{seed}",
+        #     run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[1],
+        #                                                   n_training_configs=n_training_configs,
+        #                                                   name=f"zeroshot-metalearning-singlebest-{expname}",
+        #                                                   expname=expname,
+        #                                                   **experiment_common_kwargs,
+        #                                                   )
+        # ))
+        #
+        # experiments.append(
+        #     Experiment(
+        #         expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-training-datasets-{seed}",
+        #         run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[1],
+        #                                                       n_training_datasets=n_training_datasets,
+        #                                                       name=f"zeroshot-metalearning-singlebest-{expname}",
+        #                                                       expname=expname,
+        #                                                       **experiment_common_kwargs,
+        #                                                       )
+        #     ),
+        #
+        # )
 
     with catchtime("total time to generate evaluations"):
         df = pd.concat([
@@ -660,4 +672,4 @@ if __name__ == "__main__":
 
     # plot_critical_diagrams(df)
 
-    # winrate_comparison(df=df, repo=repo)
+    winrate_comparison(df=df, repo=repo)

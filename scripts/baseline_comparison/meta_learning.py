@@ -150,7 +150,8 @@ def zeroshot_results_metalearning(
 
         df_meta_features_train, df_meta_features_test = get_meta_features(repo,
                                                                           meta_features_selected,
-                                                                          selected_tids
+                                                                          selected_tids,
+                                                                          extended_mf=True
                                                                           )
 
         df_rank_all = df_rank.stack().reset_index(name='rank')
@@ -195,16 +196,22 @@ def zeroshot_results_metalearning(
         # # meta_features_to_consider = ["rank", "NumberOfMissingValues"]
         # # 3 features
         # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize"]
-        # # 5 features
+        # 5 features
         # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues"]
         # 8 features
         # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures"]
+        # 9 features
+        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses"]
+        # 10 features
+        meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type"]
+        # 11 features
+        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type", "MinorityClassSize"]
         # 12 features --> done
         # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type", "MinorityClassSize", "framework"]
-        # train_meta.drop(columns=train_meta.columns.difference(meta_features_to_consider), inplace=True)
-        # test_meta_new.drop(columns=test_meta_new.columns.difference(meta_features_to_consider), inplace=True)
-        # print(f"remaining columns train: {list(train_meta.columns)}")
-        # print(f"remaining columns test: {list(test_meta_new.columns)}")
+        train_meta.drop(columns=train_meta.columns.difference(meta_features_to_consider), inplace=True)
+        test_meta_new.drop(columns=test_meta_new.columns.difference(meta_features_to_consider), inplace=True)
+        print(f"remaining columns train: {list(train_meta.columns)}")
+        print(f"remaining columns test: {list(test_meta_new.columns)}")
 
         # meta_features_to_consider = ["rank", "framework"]
         # # meta_features_to_consider = ["rank", "problem_type"]
