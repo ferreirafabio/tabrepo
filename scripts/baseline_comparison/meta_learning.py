@@ -12,7 +12,6 @@ import random
 from sklearn.model_selection import KFold
 from scripts.baseline_comparison.meta_learning_utils import minmax_normalize_tasks, print_arguments
 
-
 from sklearn.metrics import mean_squared_error
 from tabrepo.portfolio.zeroshot_selection import zeroshot_configs
 from tabrepo.repository import EvaluationRepository
@@ -59,6 +58,7 @@ def zeroshot_results_metalearning(
         name: str = "",
         expname: str = "",
         loss: str = "metric_error",
+        use_extended_mf: bool = False,
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -151,7 +151,7 @@ def zeroshot_results_metalearning(
         df_meta_features_train, df_meta_features_test = get_meta_features(repo,
                                                                           meta_features_selected,
                                                                           selected_tids,
-                                                                          extended_mf=True
+                                                                          use_extended_mf=use_extended_mf
                                                                           )
 
         df_rank_all = df_rank.stack().reset_index(name='rank')
@@ -203,15 +203,15 @@ def zeroshot_results_metalearning(
         # 9 features
         # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses"]
         # 10 features
-        meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type"]
+        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type"]
         # 11 features
         # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type", "MinorityClassSize"]
         # 12 features --> done
         # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type", "MinorityClassSize", "framework"]
-        train_meta.drop(columns=train_meta.columns.difference(meta_features_to_consider), inplace=True)
-        test_meta_new.drop(columns=test_meta_new.columns.difference(meta_features_to_consider), inplace=True)
-        print(f"remaining columns train: {list(train_meta.columns)}")
-        print(f"remaining columns test: {list(test_meta_new.columns)}")
+        # train_meta.drop(columns=train_meta.columns.difference(meta_features_to_consider), inplace=True)
+        # test_meta_new.drop(columns=test_meta_new.columns.difference(meta_features_to_consider), inplace=True)
+        # print(f"remaining columns train: {list(train_meta.columns)}")
+        # print(f"remaining columns test: {list(test_meta_new.columns)}")
 
         # meta_features_to_consider = ["rank", "framework"]
         # # meta_features_to_consider = ["rank", "problem_type"]
@@ -242,6 +242,25 @@ def zeroshot_results_metalearning(
 
         # test_meta.drop(['std_dev_rank'], axis=1, inplace=True)
 
+        if use_extended_mf:
+            max_limit = np.finfo(np.float32).max
+            min_limit = np.finfo(np.float32).min
+
+            numerical_columns = train_meta.select_dtypes(include=[np.number]).columns
+            train_meta[numerical_columns] = train_meta[numerical_columns].clip(lower=min_limit, upper=max_limit)
+            numerical_columns = test_meta_new.select_dtypes(include=[np.number]).columns
+            test_meta_new[numerical_columns] = test_meta_new[numerical_columns].clip(lower=min_limit, upper=max_limit)
+            numerical_columns = test_meta.select_dtypes(include=[np.number]).columns
+            test_meta[numerical_columns] = test_meta[numerical_columns].clip(lower=min_limit, upper=max_limit)
+
+            train_meta.replace([np.inf, -np.inf], np.nan, inplace=True)
+            test_meta.replace([np.inf, -np.inf], np.nan, inplace=True)
+            test_meta_new.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+            train_meta.fillna(value=-100, inplace=True)
+            test_meta.fillna(value=-100, inplace=True)
+            test_meta_new.fillna(value=-100, inplace=True)
+
         predictor = TabularPredictor(label="rank").fit(
             train_meta,
             # hyperparameters={
@@ -255,12 +274,17 @@ def zeroshot_results_metalearning(
             # time_limit=300,
             # time_limit=10,
             # time_limit=30,
-            verbosity=3,
+            # verbosity=3,
         )
         predictor.leaderboard(display=True)
 
         # run predict to get the portfolio
         ranks = predictor.predict(test_meta_new)
+        if ranks.isna().any():
+            print("ranks has NaN")
+            print(f"ranks: {ranks}")
+            print(f"train_meta: {train_meta}")
+            print(f"test id {test_datasets}")
         rmse_test = np.sqrt(mean_squared_error(test_meta["rank"], ranks))
         # feature_importance_df = predictor.feature_importance(test_meta_new)
         feature_importance_df = None

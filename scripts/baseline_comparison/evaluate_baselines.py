@@ -172,7 +172,7 @@ def rename_dataframe(df):
     return df
 
 
-def generate_sentitivity_plots(df, show: bool = False):
+def generate_sensitivity_plots(df, show: bool = False, meta_learning: bool = False):
     # show stds
 
     # show stds
@@ -185,7 +185,8 @@ def generate_sentitivity_plots(df, show: bool = False):
     ]
     for i, (dimension, legend) in enumerate(dimensions):
         for j, metric in enumerate(["normalized-error", "rank"]):
-            df_portfolio_metalearning = df.loc[df.method.str.contains(f"Portfolio-N.*-{dimension}.*metalearning.*4h"), :].copy()
+            if meta_learning:
+                df_portfolio_metalearning = df.loc[df.method.str.contains(f"Portfolio-N.*-{dimension}.*metalearning.*4h"), :].copy()
             df_portfolio = df.loc[df.method.str.contains(f"Portfolio-N.*-{dimension}(?!.*metalearning).*4h"), :].copy()
             df_ag = df.loc[df.method.str.contains("AutoGluon best \(4h\)"), metric].copy()
 
@@ -194,7 +195,8 @@ def generate_sentitivity_plots(df, show: bool = False):
             df_portfolio_metalearning.loc[:, dimension] = df_portfolio_metalearning.loc[:, "method"].apply(
                 lambda s: int(s.replace("metalearning (ensemble) (4h)", "").split("-")[-1][1:]))
             df_portfolio = df_portfolio[df_portfolio[dimension] > 1]
-            df_portfolio_metalearning = df_portfolio_metalearning[df_portfolio_metalearning[dimension] > 1]
+            if meta_learning:
+                df_portfolio_metalearning = df_portfolio_metalearning[df_portfolio_metalearning[dimension] > 1]
 
             dim, mean, sem = df_portfolio.loc[:, [dimension, metric]].groupby(dimension).agg(
                 ["mean", "sem"]).reset_index().values.T
@@ -207,15 +209,16 @@ def generate_sentitivity_plots(df, show: bool = False):
                 marker="o",
             )
 
-            dim, mean, sem = df_portfolio_metalearning.loc[:, [dimension, metric]].groupby(dimension).agg(
-                ["mean", "sem"]).reset_index().values.T
-            ax = axes[j][i]
-            ax.errorbar(
-                dim, mean, sem,
-                label="zeroshot singlebest N1 Metalearning",
-                linestyle="",
-                marker="o",
-            )
+            if meta_learning:
+                dim, mean, sem = df_portfolio_metalearning.loc[:, [dimension, metric]].groupby(dimension).agg(
+                    ["mean", "sem"]).reset_index().values.T
+                ax = axes[j][i]
+                ax.errorbar(
+                    dim, mean, sem,
+                    label="zeroshot singlebest N1 Metalearning",
+                    linestyle="",
+                    marker="o",
+                )
 
             ax.set_xlim([0, None])
             if j == 1:
@@ -228,7 +231,7 @@ def generate_sentitivity_plots(df, show: bool = False):
                 ax.legend()
             # axes[i][j].set_title("100 configs per framework, time_limit=600")
     # fig_save_path = figure_path() / f"sensitivity.pdf"
-    fig.suptitle("9 meta-features, time_limit=600")
+    # fig.suptitle("9 meta-features, time_limit=600")
     fig_save_path = figure_path() / f"sensitivity.png"
     plt.tight_layout()
     plt.savefig(fig_save_path)
@@ -298,6 +301,7 @@ if __name__ == "__main__":
     parser.add_argument("--loss", type=str, help="loss (metric_error, metric_error_val, rank)", default="metric_error")
     parser.add_argument("--n_configs_per_framework", type=int, required=False,
                         help="Number of total configs per family to consider")
+
     parser.add_argument("--extended_mf_general", action="store_true",
                         help="Use general meta features")
     parser.add_argument("--extended_mf_statistical", action="store_true",
@@ -308,6 +312,16 @@ if __name__ == "__main__":
                         help="Use model-based meta features")
     parser.add_argument("--extended_mf_landmarking", action="store_true",
                         help="Use landmarking meta features")
+    parser.add_argument("--extended_mf_concept", action="store_true",
+                        help="Use concept meta features")
+    parser.add_argument("--extended_mf_clustering", action="store_true",
+                        help="Use clustering meta features")
+    parser.add_argument("--extended_mf_complexity", action="store_true",
+                        help="Use complexity meta features")
+    parser.add_argument("--extended_mf_itemset", action="store_true",
+                        help="Use itemset meta features")
+    parser.add_argument("--extended_mf_relative", action="store_true",
+                        help="Use relative meta features")
     args = parser.parse_args()
     print(args.__dict__)
 
@@ -321,6 +335,14 @@ if __name__ == "__main__":
     use_meta_features = not args.deactivate_meta_features
     loss = args.loss
     n_configs_per_framework = args.n_configs_per_framework
+
+    use_extended_mf = False
+    if (args.extended_mf_general or
+            args.extended_mf_statistical or
+            args.extended_mf_info_theory or
+            args.extended_mf_model_based or
+            args.extended_mf_landmarking):
+        use_extended_mf = True
 
     if n_datasets:
         expname += f"-{n_datasets}"
@@ -387,7 +409,8 @@ if __name__ == "__main__":
 
         repo = repo.subset(configs=sampled_configs)
 
-    repo = load_extended_meta_features(repo, args)
+    if use_extended_mf:
+        repo = load_extended_meta_features(repo, args)
 
     experiment_common_kwargs = dict(
         repo=repo,
@@ -398,6 +421,7 @@ if __name__ == "__main__":
         n_eval_folds=n_eval_folds,
         engine=engine,
         use_meta_features=use_meta_features,
+        use_extended_mf=use_extended_mf,
         loss=loss,
     )
 
@@ -430,18 +454,18 @@ if __name__ == "__main__":
         #     expname=expname, name=f"zeroshot-{expname}",
         #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs)
         # ),
-        Experiment(
-            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
-            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
-                                                          n_portfolios=[1],
-                                                          name=f"zeroshot-metalearning-singlebest-{expname}",
-                                                          expname=expname,
-                                                          )
-        ),
-        Experiment(
-            expname=expname, name=f"zeroshot-singlebest-{expname}",
-            run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
-        ),
+        # Experiment(
+        #     expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
+        #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
+        #                                                   n_portfolios=[1],
+        #                                                   name=f"zeroshot-metalearning-singlebest-{expname}",
+        #                                                   expname=expname,
+        #                                                   )
+        # ),
+        # Experiment(
+        #     expname=expname, name=f"zeroshot-singlebest-{expname}",
+        #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
+        # ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-maxruntimes",
         #     run_fun=lambda: zeroshot_results(max_runtimes=max_runtimes, **experiment_common_kwargs)
@@ -457,16 +481,16 @@ if __name__ == "__main__":
     ]
 
     # Use more seeds
-    # for seed in range(n_seeds):
-    #     experiments.append(Experiment(
-    #         expname=expname, name=f"zeroshot-{expname}-num-configs-{seed}",
-    #         run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs, **experiment_common_kwargs)
-    #     ))
-    #
-        # experiments.append(Experiment(
-        #     expname=expname, name=f"zeroshot-{expname}-num-training-datasets-{seed}",
-        #     run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets, **experiment_common_kwargs)
-        # ))
+    for seed in range(n_seeds):
+        experiments.append(Experiment(
+            expname=expname, name=f"zeroshot-{expname}-num-configs-{seed}",
+            run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs, **experiment_common_kwargs)
+        ))
+
+        experiments.append(Experiment(
+            expname=expname, name=f"zeroshot-{expname}-num-training-datasets-{seed}",
+            run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets, **experiment_common_kwargs)
+        ))
 
         # experiments.append(Experiment(
         #     expname=expname, name=f"zeroshot-singlebest-{expname}-num-configs-{seed}",
@@ -528,7 +552,7 @@ if __name__ == "__main__":
     print(f"Total time of experiments: {total_time_h} hours")
     save_total_runtime_to_file(total_time_h)
 
-    generate_sentitivity_plots(df, show=True)
+    generate_sensitivity_plots(df, show=True, meta_learning=False)
 
     show_latex_table(df, "all", show_table=True, n_digits=n_digits)
     ag_styles = [
@@ -670,6 +694,6 @@ if __name__ == "__main__":
     fig.savefig(fig_save_path, bbox_extra_artists=bbox_extra_artists, bbox_inches='tight')
     fig.show()
 
-    # plot_critical_diagrams(df)
+    plot_critical_diagrams(df)
 
     winrate_comparison(df=df, repo=repo)

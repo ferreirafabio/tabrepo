@@ -383,8 +383,6 @@ def zeroshot_results(
         max_runtimes: List[float] = [default_runtime],
         engine: str = "ray",
         **kwargs,
-        # use_meta_features: bool = True, # not used
-        # loss: str = "metric_error" # not used
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
