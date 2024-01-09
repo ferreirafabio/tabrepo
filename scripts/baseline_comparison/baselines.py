@@ -184,7 +184,7 @@ def framework_default_results(repo: EvaluationRepository,
 
 def sample_and_pick_best(
         repo: EvaluationRepository, tid: int, fold: int, framework_type: Optional[str], n_output: int,
-        max_runtime: float = None,
+        max_runtime: float = None, random_state: int = 0,
 ) -> Tuple[List[str], List[str]]:
     """
     :return: Samples random configurations for the given task until `max_runtime` is exhausted and returns the top `n_output` configurations
@@ -206,7 +206,7 @@ def sample_and_pick_best(
         print(f"missing data {tid} {fold} {framework_type}")
 
     # shuffle the rows
-    df_sub = df_sub.sample(frac=1, random_state=0).reset_index(drop=True)
+    df_sub = df_sub.sample(frac=1, random_state=random_state).reset_index(drop=True)
 
     # pick only configurations up to max_runtime
     if max_runtime:
@@ -382,6 +382,7 @@ def zeroshot_results(
         n_training_configs: List[int] = [None],
         max_runtimes: List[float] = [default_runtime],
         engine: str = "ray",
+        seed: int = 0,
         **kwargs,
 ) -> List[ResultRow]:
     """
@@ -431,8 +432,8 @@ def zeroshot_results(
             else:
                 configs += list(np.random.choice(models_framework, n_training_config, replace=False))
 
-        # Randomly shuffle the config order with seed 0
-        rng = np.random.default_rng(seed=0)
+        # Randomly shuffle the config order with the given seed
+        rng = np.random.default_rng(seed=seed)
         configs = list(rng.choice(configs, len(configs), replace=False))
 
         # # exclude configurations from zeroshot selection whose runtime exceeds runtime budget by large amount

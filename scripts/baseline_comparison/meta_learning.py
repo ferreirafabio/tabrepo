@@ -59,6 +59,7 @@ def zeroshot_results_metalearning(
         expname: str = "",
         loss: str = "metric_error",
         use_extended_mf: bool = False,
+        seed: int = 0,
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -112,8 +113,8 @@ def zeroshot_results_metalearning(
             else:
                 configs += list(np.random.choice(models_framework, n_training_config, replace=False))
 
-        # Randomly shuffle the config order with seed 0
-        rng = np.random.default_rng(seed=0)
+        # Randomly shuffle the config order with the given seed
+        rng = np.random.default_rng(seed=seed)
         configs = list(rng.choice(configs, len(configs), replace=False))
 
         # # exclude configurations from zeroshot selection whose runtime exceeds runtime budget by large amount
@@ -269,8 +270,8 @@ def zeroshot_results_metalearning(
             # "GBM": {},
             # },
             # time_limit=7200,
-            # time_limit=1200,
-            time_limit=600,
+            time_limit=1200,
+            # time_limit=600,
             # time_limit=300,
             # time_limit=10,
             # time_limit=30,
