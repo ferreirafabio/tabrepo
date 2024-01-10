@@ -184,18 +184,11 @@ def generate_sensitivity_plots(df, show: bool = False, meta_learning: bool = Fal
     ]
     for i, (dimension, legend) in enumerate(dimensions):
         for j, metric in enumerate(["normalized-error", "rank"]):
-            if meta_learning:
-                df_portfolio_metalearning = df.loc[df.method.str.contains(f"Portfolio-N.*-{dimension}.*metalearning.*4h"), :].copy()
             df_portfolio = df.loc[df.method.str.contains(f"Portfolio-N.*-{dimension}(?!.*metalearning).*4h"), :].copy()
             df_ag = df.loc[df.method.str.contains("AutoGluon best \(4h\)"), metric].copy()
             df_portfolio.loc[:, dimension] = df_portfolio.loc[:, "method"].apply(
                 lambda s: int(s.replace(" (ensemble) (4h)", "").split("-")[-1][1:]))
             df_portfolio = df_portfolio[df_portfolio[dimension] > 1]
-
-            if meta_learning:
-                df_portfolio_metalearning.loc[:, dimension] = df_portfolio_metalearning.loc[:, "method"].apply(
-                    lambda s: int(s.replace("metalearning (ensemble) (4h)", "").split("-")[-1][1:]))
-                df_portfolio_metalearning = df_portfolio_metalearning[df_portfolio_metalearning[dimension] > 1]
 
             dim, mean, sem = df_portfolio.loc[:, [dimension, metric]].groupby(dimension).agg(
                 ["mean", "sem"]).reset_index().values.T
@@ -208,6 +201,13 @@ def generate_sensitivity_plots(df, show: bool = False, meta_learning: bool = Fal
             )
 
             if meta_learning:
+                df_portfolio_metalearning = df.loc[
+                                            df.method.str.contains(f"Portfolio-N.*-{dimension}.*metalearning.*4h"),
+                                            :].copy()
+                df_portfolio_metalearning.loc[:, dimension] = df_portfolio_metalearning.loc[:, "method"].apply(
+                    lambda s: int(s.replace("metalearning (ensemble) (4h)", "").split("-")[-1][1:]))
+                df_portfolio_metalearning = df_portfolio_metalearning[df_portfolio_metalearning[dimension] > 1]
+
                 dim, mean, sem = df_portfolio_metalearning.loc[:, [dimension, metric]].groupby(dimension).agg(
                     ["mean", "sem"]).reset_index().values.T
                 ax = axes[j][i]
@@ -225,11 +225,14 @@ def generate_sensitivity_plots(df, show: bool = False, meta_learning: bool = Fal
                 ax.set_ylabel(f"{metric}")
             ax.grid()
             ax.hlines(df_ag.mean(), xmin=0, xmax=max(dim), color="black", label="AutoGluon", ls="--")
-            if i == 1 and j == 0:
-                ax.legend()
+            if i == 0 and j == 0:
+                legend = ax.legend()
+                for text in legend.get_texts():
+                    text.set_fontsize(8)
             # axes[i][j].set_title("100 configs per framework, time_limit=600")
     # fig_save_path = figure_path() / f"sensitivity.pdf"
-    # fig.suptitle("9 meta-features, time_limit=600")
+    # fig.suptitle("all meta-features, time_limit=300")
+    fig.suptitle("time_limit=300, 3 seeds")
     fig_save_path = figure_path() / f"sensitivity.png"
     plt.tight_layout()
     plt.savefig(fig_save_path)

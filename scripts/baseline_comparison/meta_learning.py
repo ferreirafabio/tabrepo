@@ -71,13 +71,14 @@ def zeroshot_results_metalearning(
     :param n_training_configs: number of configurations available when fitting zeroshot TODO per framework
     :param max_runtimes: max runtime available when evaluating zeroshot configuration at test time
     :param engine: engine to use, must be "sequential", "joblib" or "ray"
+    :param seed: the seed for the random number generator used for shuffling the configs
     :return: evaluation obtained on all combinations
     """
     print_arguments(**locals())
 
     def evaluate_dataset(test_datasets, n_portfolio, n_ensemble, n_training_dataset, n_training_fold, n_training_config,
                          max_runtime, repo: EvaluationRepository, df_rank, rank_scorer, normalized_scorer,
-                         model_frameworks, use_meta_features):
+                         model_frameworks, use_meta_features, seed):
         method_name = zeroshot_name(
             n_portfolio=n_portfolio,
             n_ensemble=n_ensemble,
@@ -113,7 +114,7 @@ def zeroshot_results_metalearning(
             else:
                 configs += list(np.random.choice(models_framework, n_training_config, replace=False))
 
-        # Randomly shuffle the config order with the given seed
+        # Randomly shuffle the config order for the passed seed
         rng = np.random.default_rng(seed=seed)
         configs = list(rng.choice(configs, len(configs), replace=False))
 
@@ -270,9 +271,9 @@ def zeroshot_results_metalearning(
             # "GBM": {},
             # },
             # time_limit=7200,
-            time_limit=1200,
+            # time_limit=1200,
             # time_limit=600,
-            # time_limit=300,
+            time_limit=300,
             # time_limit=10,
             # time_limit=30,
             # verbosity=3,
@@ -391,7 +392,7 @@ def zeroshot_results_metalearning(
         # inputs=list(itertools.product(test_dataset_folds, n_portfolios, n_ensembles, n_training_datasets, n_training_folds,
         #              n_training_configs, max_runtimes)),
         context=dict(repo=repo, df_rank=df_rank, rank_scorer=rank_scorer, normalized_scorer=normalized_scorer,
-                     model_frameworks=model_frameworks, use_meta_features=use_meta_features),
+                     model_frameworks=model_frameworks, use_meta_features=use_meta_features, seed=seed),
         engine=engine,
     )
 
