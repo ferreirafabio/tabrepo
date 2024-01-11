@@ -85,7 +85,7 @@ def load_extended_meta_features(repo, args, rewrite_csvs=False):
     return repo
 
 
-def get_meta_features(repo, meta_features_selected, selected_tids, use_extended_mf=False):
+def get_meta_features(repo, meta_features_selected, selected_tids, use_extended_meta_features=False):
     df_meta_features = repo._df_metadata[meta_features_selected]
 
     # to avoid "A value is trying to be set on a copy of a slice from a DataFrame" warning
@@ -94,7 +94,7 @@ def get_meta_features(repo, meta_features_selected, selected_tids, use_extended_
         repo._zeroshot_context.dataset_to_problem_type_dict)
     # df_meta_features.loc[:, "problem_type"] = df_meta_features.loc[:, "problem_type"].factorize()[0]
 
-    if use_extended_mf:
+    if use_extended_meta_features:
         df_meta_features_new = pd.merge(df_meta_features_new, repo._extended_df_metadata, on='dataset')
 
     assert len(df_meta_features_new) == len(repo._df_metadata), "generated meta features df differs in length compared to repo._df_metadata"

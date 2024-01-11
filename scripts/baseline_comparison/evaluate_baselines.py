@@ -299,9 +299,13 @@ if __name__ == "__main__":
                         help="The ratio of ray processes to logical cpu cores. Use lower values to reduce memory usage. Only used if engine == 'ray'",)
     parser.add_argument("--deactivate_meta_features", action="store_true",
                         help="Ignore all meta features")
-    parser.add_argument("--loss", type=str, help="loss (metric_error, metric_error_val, rank)", default="metric_error")
+    parser.add_argument("--loss", type=str, help="loss (ranks based on 'metric_error' or 'metric_error_val', or originally provided 'rank')", default="metric_error")
     parser.add_argument("--n_configs_per_framework", type=int, required=False,
                         help="Number of total configs per family to consider")
+    parser.add_argument("--use_synthetic_portfolios", action="store_true",
+                        help="indicates whether we should add synthetic portfolios to the metalearning train data")
+    parser.add_argument("--deactivate_metalearning_kfold_training", action="store_true",
+                        help="indicates whether we should turn off using kfold training (default: 5 splits) as opposed to leave-one-dataset training. Using this flag increases training and evaluation time.")
 
     parser.add_argument("--extended_mf_general", action="store_true",
                         help="Use general meta features")
@@ -336,6 +340,8 @@ if __name__ == "__main__":
     use_meta_features = not args.deactivate_meta_features
     loss = args.loss
     n_configs_per_framework = args.n_configs_per_framework
+    use_synthetic_portfolios = args.use_synthetic_portfolios
+    use_metalearning_kfdold_training = not args.deactivate_metalearning_kfold_training
 
     use_extended_mf = False
     if (args.extended_mf_general or
@@ -423,8 +429,10 @@ if __name__ == "__main__":
         n_eval_folds=n_eval_folds,
         engine=engine,
         use_meta_features=use_meta_features,
-        use_extended_mf=use_extended_mf,
+        use_extended_meta_features=use_extended_mf,
         loss=loss,
+        use_synthetic_portfolios=use_synthetic_portfolios,
+        use_metalearning_kfdold_training=use_metalearning_kfdold_training,
     )
 
     experiments = [
@@ -441,17 +449,17 @@ if __name__ == "__main__":
         #     run_fun=lambda: framework_best_results(framework_types=[None], max_runtimes=[3600, 3600 * 4, 3600 * 24], **experiment_common_kwargs),
         # ),
         # Automl baselines such as Autogluon best, high, medium quality
-        Experiment(
-            expname=expname, name=f"automl-baselines-{expname}",
-            run_fun=lambda: automl_results(**experiment_common_kwargs),
-        ),
         # Experiment(
-        #     expname=expname, name=f"zeroshot-metalearning-{expname}",
-        #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
-        #                                                   name=f"zeroshot-metalearning-{expname}",
-        #                                                   expname=expname
-        #                                                   )
+        #     expname=expname, name=f"automl-baselines-{expname}",
+        #     run_fun=lambda: automl_results(**experiment_common_kwargs),
         # ),
+        Experiment(
+            expname=expname, name=f"zeroshot-metalearning-{expname}",
+            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
+                                                          name=f"zeroshot-metalearning-{expname}",
+                                                          expname=expname,
+                                                          )
+        ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-{expname}",
         #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs)
@@ -494,23 +502,23 @@ if __name__ == "__main__":
         #     run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets, seed=seed, **experiment_common_kwargs)
         # ))
 
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-singlebest-{expname}-num-configs-{seed}",
-            run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs,
-                                             n_portfolios=[1],
-                                             seed=seed,
-                                             **experiment_common_kwargs,
-                                             )
-        ))
-
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-singlebest-{expname}-num-training-datasets-{seed}",
-            run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets,
-                                             n_portfolios=[1],
-                                             seed=seed,
-                                             **experiment_common_kwargs,
-                                             )
-        ))
+        # experiments.append(Experiment(
+        #     expname=expname, name=f"zeroshot-singlebest-{expname}-num-configs-{seed}",
+        #     run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs,
+        #                                      n_portfolios=[1],
+        #                                      seed=seed,
+        #                                      **experiment_common_kwargs,
+        #                                      )
+        # ))
+        #
+        # experiments.append(Experiment(
+        #     expname=expname, name=f"zeroshot-singlebest-{expname}-num-training-datasets-{seed}",
+        #     run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets,
+        #                                      n_portfolios=[1],
+        #                                      seed=seed,
+        #                                      **experiment_common_kwargs,
+        #                                      )
+        # ))
 
         experiments.append(Experiment(
             expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-configs-{seed}",

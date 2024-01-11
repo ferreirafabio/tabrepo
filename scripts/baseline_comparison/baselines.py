@@ -76,11 +76,6 @@ def evaluate_configs(
     config_selected = list(sorted(config_selected.copy()))
     dataset = repo.tid_to_dataset(tid=tid)
 
-    # if isinstance(tid, list):
-    #     dataset = [repo.tid_to_dataset(t_ds) for t_ds in tid]
-    # else:
-    #     dataset = repo.tid_to_dataset(tid=tid)
-
     metric_errors, ensemble_weights = repo.evaluate_ensemble(
         datasets=[dataset],
         # datasets=dataset if isinstance(dataset, list) else [dataset],
