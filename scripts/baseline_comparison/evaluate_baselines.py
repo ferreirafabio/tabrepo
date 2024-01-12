@@ -4,7 +4,9 @@ from typing import List, Callable, Dict
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
+import json
 import matplotlib
+import sys
 from pathlib import Path
 import random
 
@@ -34,8 +36,8 @@ from scripts.baseline_comparison.baselines import (
 
 from scripts.baseline_comparison.meta_learning import zeroshot_results_metalearning
 from tabrepo.utils.meta_features import load_extended_meta_features
-
 from scripts.baseline_comparison.compare_results import winrate_comparison
+from scripts.baseline_comparison.visualize_config_selected import visualize_config_selected
 from scripts.baseline_comparison.plot_utils import (
     MethodStyle,
     show_latex_table,
@@ -169,7 +171,7 @@ def rename_dataframe(df):
     return df
 
 
-def generate_sensitivity_plots(df, show: bool = False, meta_learning: bool = False):
+def generate_sensitivity_plots(df, exp_name, title, save_name, show: bool = False, meta_learning: bool = False):
     # show stds
 
     # show stds
@@ -228,11 +230,10 @@ def generate_sensitivity_plots(df, show: bool = False, meta_learning: bool = Fal
                     text.set_fontsize(8)
             # axes[i][j].set_title("100 configs per framework, time_limit=600")
     # fig_save_path = figure_path() / f"sensitivity.pdf"
-    # fig.suptitle("all meta-features, time_limit=300")
-    fig.suptitle("time_limit=300, 3 seeds")
-    fig_save_path = figure_path() / f"sensitivity.png"
+    fig.suptitle(f"{exp_name}, {title}")
     plt.tight_layout()
-    plt.savefig(fig_save_path)
+    plt.savefig(str(Paths.data_root / "results-baseline-comparison" / exp_name / save_name / f"sensitivity.png"))
+    # plt.savefig(fig_save_path)
     if show:
         plt.show()
 
@@ -241,42 +242,6 @@ def save_total_runtime_to_file(total_time_h):
     # Save total runtime so that "show_repository_stats.py" can show the ratio of saved time
     with open(output_path / "tables" / "runtime.txt", "w") as f:
         f.write(str(total_time_h))
-
-
-def generate_selected_config_hist_plots(df):
-    # create histograms for selected configs
-    from collections import Counter
-    import numpy as np
-    best_n_configs = 10
-    n_datasets = None  # only use a subset of the datasets (unique folds), set to None if all should be used
-    methods_in_df = df["method"].unique()
-    # [method for method in methods_in_df if "N1" in method]
-    for method in methods_in_df:
-        if n_datasets:
-            df = df.groupby('dataset', group_keys=False).apply(lambda x: x.sample(1))
-            # shuffle dataframe rows
-            df = df.sample(frac=1.0)[:n_datasets].reset_index(drop=True)
-
-        configs_selected = list(df[df["method"] == method]["config_selected"])
-        # convert string to list of strings
-        configs_selected = [eval(cfg) for cfg in configs_selected]
-        # flatten across all datasets and folds and count occurrences
-        config_counts = Counter(np.concatenate(configs_selected))
-        config_counts_dict = dict(config_counts)
-
-        # Select the top 'n' configs based on occurrences
-        top_n_configs = dict(sorted(config_counts.items(), key=lambda x: x[1], reverse=True)[:best_n_configs])
-
-        # Print the method and corresponding counts
-        print(f"Method: {method}")
-        print("Config Counts:", config_counts_dict)
-        plt.figure(figsize=(30, 25))
-        plt.bar(top_n_configs.keys(), top_n_configs.values())
-        plt.xticks(rotation=45, ha='right', fontsize=20)
-        plt.yticks(fontsize=20)
-        plt.tight_layout()
-        plt.savefig(str(Paths.data_root / "simulation" / expname / ("selected_cfg_histogram_" + method + ".png")))
-        plt.show()
 
 
 
@@ -303,6 +268,8 @@ if __name__ == "__main__":
                         help="indicates whether we should add synthetic portfolios to the metalearning train data")
     parser.add_argument("--deactivate_metalearning_kfold_training", action="store_true",
                         help="indicates whether we should turn off using kfold training (default: 5 splits) as opposed to leave-one-dataset training. Using this flag increases training and evaluation time.")
+    parser.add_argument("--n_splits_kfold", type=int, default=5, required=False,
+                        help="Number of splits for kfold metalearning training to consider")
     parser.add_argument("--generate_feature_importance", action="store_true",
                         help="indicates whether we should calculate feature importance and generate plots for it.")
 
@@ -340,8 +307,9 @@ if __name__ == "__main__":
     loss = args.loss
     n_configs_per_framework = args.n_configs_per_framework
     use_synthetic_portfolios = args.use_synthetic_portfolios
-    use_metalearning_kfdold_training = not args.deactivate_metalearning_kfold_training
+    use_metalearning_kfold_training = not args.deactivate_metalearning_kfold_training
     generate_feature_importance = args.generate_feature_importance
+    n_splits_kfold = args.n_splits_kfold
 
     use_extended_mf = False
     if (args.extended_mf_general or
@@ -351,7 +319,21 @@ if __name__ == "__main__":
             args.extended_mf_landmarking):
         use_extended_mf = True
 
-    assert (generate_feature_importance and use_metalearning_kfdold_training), "Feature importance can only be generated with kfold training"
+    training_type_str = f"{n_splits_kfold}-fold-training" if use_metalearning_kfold_training else "LOO-training"
+    meta_feature_str = f"extended-meta-features" if use_extended_mf else "simple-meta-features"
+
+    exp_title = f"{training_type_str}, {meta_feature_str}"
+    exp_title_save_name = exp_title.replace(' ', '_').replace(',', '')
+
+    save_dir = Paths.data_root / "results-baseline-comparison" / args.repo / exp_title_save_name
+    os.makedirs(save_dir, exist_ok=False)
+
+    args_dict = vars(args)
+    with open(save_dir / "args.json", 'w') as args_file:
+        json.dump(args_dict, args_file, indent=4)
+
+    if generate_feature_importance:
+        assert use_metalearning_kfold_training, "Feature importance can only be generated with kfold training"
 
     if n_datasets:
         expname += f"-{n_datasets}"
@@ -434,8 +416,10 @@ if __name__ == "__main__":
         use_extended_meta_features=use_extended_mf,
         loss=loss,
         use_synthetic_portfolios=use_synthetic_portfolios,
-        use_metalearning_kfdold_training=use_metalearning_kfdold_training,
+        use_metalearning_kfold_training=use_metalearning_kfold_training,
         generate_feature_importance=generate_feature_importance,
+        n_splits_kfold=n_splits_kfold,
+        save_name=exp_title_save_name,
     )
 
     experiments = [
@@ -467,18 +451,18 @@ if __name__ == "__main__":
         #     expname=expname, name=f"zeroshot-{expname}",
         #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs)
         # ),
-        # Experiment(
-        #     expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
-        #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
-        #                                                   n_portfolios=[1],
-        #                                                   name=f"zeroshot-metalearning-singlebest-{expname}",
-        #                                                   expname=expname,
-        #                                                   )
-        # ),
-        # Experiment(
-        #     expname=expname, name=f"zeroshot-singlebest-{expname}",
-        #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
-        # ),
+        Experiment(
+            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
+            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
+                                                          n_portfolios=[1],
+                                                          name=f"zeroshot-metalearning-singlebest-{expname}",
+                                                          expname=expname,
+                                                          )
+        ),
+        Experiment(
+            expname=expname, name=f"zeroshot-singlebest-{expname}",
+            run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
+        ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-maxruntimes",
         #     run_fun=lambda: zeroshot_results(max_runtimes=max_runtimes, **experiment_common_kwargs)
@@ -495,6 +479,7 @@ if __name__ == "__main__":
 
     # Use more seeds
     for seed in range(n_seeds):
+        print(f"running seed {seed}")
         # experiments.append(Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-num-configs-{seed}",
         #     run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs, seed=seed, **experiment_common_kwargs)
@@ -561,15 +546,15 @@ if __name__ == "__main__":
 
     # df = time_cutoff_baseline(df)
 
-    # generate_selected_config_hist_plots(df)
-
     print(f"Obtained {len(df)} evaluations on {len(df.dataset.unique())} datasets for {len(df.method.unique())} methods.")
     print(f"Methods available:" + "\n".join(sorted(df.method.unique())))
     total_time_h = df.loc[:, "time fit (s)"].sum() / 3600
     print(f"Total time of experiments: {total_time_h} hours")
     save_total_runtime_to_file(total_time_h)
 
-    generate_sensitivity_plots(df, show=True, meta_learning=True)
+    generate_sensitivity_plots(df, exp_name=args.repo, title=exp_title, save_name=exp_title_save_name, show=True, meta_learning=True)
+
+    visualize_config_selected(exp_name=args.repo, title=exp_title, save_name=exp_title_save_name)
 
     show_latex_table(df, "all", show_table=True, n_digits=n_digits)
     ag_styles = [
@@ -713,4 +698,4 @@ if __name__ == "__main__":
 
     # plot_critical_diagrams(df)
 
-    # winrate_comparison(df=df, repo=repo)
+    winrate_comparison(df=df, repo=repo)

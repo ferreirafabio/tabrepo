@@ -27,7 +27,7 @@ from tabrepo.repository.time_utils import (
 from tabrepo.utils.meta_features import get_meta_features
 from tabrepo.utils.parallel_for import parallel_for
 from autogluon.tabular import TabularPredictor
-from scripts.baseline_comparison.vis_utils import save_feature_important_plots
+from scripts.baseline_comparison.vis_utils import save_feature_importance_plots
 from tabrepo.loaders import Paths
 
 from scripts.baseline_comparison.baselines import (
@@ -64,9 +64,11 @@ def zeroshot_results_metalearning(
         loss: str = "metric_error",
         use_extended_meta_features: bool = False,
         use_synthetic_portfolios: bool = False,
-        use_metalearning_kfdold_training: bool = True,
+        use_metalearning_kfold_training: bool = True,
+        n_splits_kfold: int = 5,
         generate_feature_importance: bool = False,
         seed: int = 0,
+        save_name: int = "experiment",
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -86,7 +88,7 @@ def zeroshot_results_metalearning(
 
     def evaluate_dataset(test_datasets, n_portfolio, n_ensemble, n_training_dataset, n_training_fold, n_training_config,
                          max_runtime, repo: EvaluationRepository, df_rank, rank_scorer, normalized_scorer,
-                         model_frameworks, use_meta_features, seed, use_metalearning_kfdold_training):
+                         model_frameworks, use_meta_features, seed, use_metalearning_kfold_training):
         method_name = zeroshot_name(
             n_portfolio=n_portfolio,
             n_ensemble=n_ensemble,
@@ -234,6 +236,12 @@ def zeroshot_results_metalearning(
             test_meta_wo_dataset = convert_df_ranges_dtypes_fillna(test_meta_wo_dataset)
             test_meta = convert_df_ranges_dtypes_fillna(test_meta)
 
+
+        # mean rmse on test for zeroshot-metalearning-singlebest-D244_F3_C1416: 239.186
+        # Time for Evaluate function.: 177.7311 secs
+
+        # mean rmse on test for zeroshot-metalearning-singlebest-D244_F3_C1416: 241.159
+        # Time for Evaluate function.: 35.8212 secs
         predictor = TabularPredictor(label="rank").fit(
             train_data=train_meta,
             tuning_data=val_meta,
@@ -250,6 +258,13 @@ def zeroshot_results_metalearning(
             # time_limit=30,
             # verbosity=3,
             excluded_model_types=["CAT"],
+            hyperparameters={"GBM": [
+                # {"extra_trees": True, "ag_args": {"name_suffix": "XT"}},
+                {},
+                # "GBMLarge",
+            ],
+            },
+            num_cpus=1,
             # presets="best_quality",
         )
 
@@ -352,9 +367,9 @@ def zeroshot_results_metalearning(
         for framework in framework_types
     }
 
-    if use_metalearning_kfdold_training:
+    if use_metalearning_kfold_training:
         print(f"Using kfold training for metalearning")
-        dataset_names_input = get_test_dataset_folds(dataset_names, n_splits=5)
+        dataset_names_input = get_test_dataset_folds(dataset_names, n_splits=n_splits_kfold)
         lengths = {fold: len(dataset) for fold, dataset in enumerate(dataset_names_input)}
         print(f"number of test datasets per fold {lengths}")
     else:
@@ -377,7 +392,7 @@ def zeroshot_results_metalearning(
                      model_frameworks=model_frameworks,
                      use_meta_features=use_meta_features,
                      seed=seed,
-                     use_metalearning_kfdold_training=use_metalearning_kfdold_training,
+                     use_metalearning_kfold_training=use_metalearning_kfold_training,
                      ),
         engine=engine,
     )
@@ -385,12 +400,13 @@ def zeroshot_results_metalearning(
     mean_test_error = np.mean([result_dct["rmse_test"] for result_dct in result_list])
     print(f"mean rmse on test for {name}: {mean_test_error:.3f}")
 
-    if n_training_datasets and generate_feature_importance:
-        # n_training_datasets is not None when we do dataset size analysis in which case we deactivate feature importance
+    if len(n_training_datasets) == 1 and n_training_datasets[0] is None and generate_feature_importance:
+        # n_training_datasets is not None when we run the sensitivity experiments in which case we do not want to run below code
         feature_importances = [result_dct["feature_importance_df"] for result_dct in result_list]
         feature_importance_averages = pd.concat(feature_importances).groupby(level=0).mean()
-        save_feature_important_plots(df=feature_importance_averages[["importance", "stddev", "p_value", "n"]],
-                                     save_path=str(Paths.data_root / "simulation" / expname / f"{name}_feat_imp"),
-                                     )
+        save_feature_importance_plots(df=feature_importance_averages[["importance", "stddev", "p_value"]],
+                                      exp_name=expname,
+                                      save_name=save_name,
+                                      )
 
     return [row for result_dct in result_list for result_rows_per_dataset in result_dct["evaluate_configs_result"].values() for row in result_rows_per_dataset]
