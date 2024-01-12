@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import KFold
+from typing import Tuple
 
 
 def convert_df_ranges_dtypes_fillna(df: pd.DataFrame) -> pd.DataFrame:
@@ -14,6 +15,20 @@ def convert_df_ranges_dtypes_fillna(df: pd.DataFrame) -> pd.DataFrame:
     df.fillna(value=-100, inplace=True)
 
     return df
+
+
+def get_train_val_split(df: pd.DataFrame, hold_out_perc: float = 0.1, seed: int = 0) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    datasets_available = df["dataset"].unique()
+    n_val_datasets_to_sample = int(len(datasets_available) * hold_out_perc)
+
+    rng = np.random.default_rng(seed=seed)
+    val_datasets = rng.choice(datasets_available, n_val_datasets_to_sample, replace=False)
+    train_datasets = np.setdiff1d(datasets_available, val_datasets)
+
+    train_df = df[df["dataset"].isin(train_datasets)]
+    val_df = df[df["dataset"].isin(val_datasets)]
+
+    return train_df, val_df
 
 
 def minmax_normalize_tasks(df):

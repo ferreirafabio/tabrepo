@@ -13,6 +13,7 @@ from scripts.baseline_comparison.meta_learning_utils import (
     minmax_normalize_tasks, print_arguments,
     convert_df_ranges_dtypes_fillna,
     get_test_dataset_folds,
+    get_train_val_split,
 )
 from tabrepo.portfolio.portfolio_generator import RandomPortfolioGenerator
 
@@ -64,6 +65,7 @@ def zeroshot_results_metalearning(
         use_extended_meta_features: bool = False,
         use_synthetic_portfolios: bool = False,
         use_metalearning_kfdold_training: bool = True,
+        generate_feature_importance: bool = False,
         seed: int = 0,
 ) -> List[ResultRow]:
     """
@@ -193,11 +195,12 @@ def zeroshot_results_metalearning(
             train_meta = df_rank_train
             test_meta = df_rank_test
 
-        # TODO: split train_meta into train_meta and val_meta, val_meta should have x perc datasets entirely held out
-        # use dataset list and take say 10 perc of that, use tuning_data=val_meta on fit()
+        # split train into dataset-disjoint 90% train and 10% val splits
+        train_meta, val_meta = get_train_val_split(df=train_meta, seed=seed)
 
         train_meta.drop(['dataset'], axis=1, inplace=True)
-        test_meta_new = test_meta.drop(['dataset'], axis=1)
+        val_meta.drop(['dataset'], axis=1, inplace=True)
+        test_meta_wo_dataset = test_meta.drop(['dataset'], axis=1)
 
         # print("-------------meta-feature ablation study-----------------")
         # # 1 feature
@@ -217,68 +220,45 @@ def zeroshot_results_metalearning(
         # 12 features --> done
         # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type", "MinorityClassSize", "framework"]
         # train_meta.drop(columns=train_meta.columns.difference(meta_features_to_consider), inplace=True)
-        # test_meta_new.drop(columns=test_meta_new.columns.difference(meta_features_to_consider), inplace=True)
+        # val_meta.drop(columns=val_meta.columns.difference(meta_features_to_consider), inplace=True)
+        # test_meta_wo_dataset.drop(columns=test_meta_wo_dataset.columns.difference(meta_features_to_consider), inplace=True)
         # print(f"remaining columns train: {list(train_meta.columns)}")
-        # print(f"remaining columns test: {list(test_meta_new.columns)}")
-
-        # meta_features_to_consider = ["rank", "framework"]
-        # # meta_features_to_consider = ["rank", "problem_type"]
-        # # meta_features_to_consider = ["rank", "MinorityClassSize"]
-        # # meta_features_to_consider = ["rank", "framework", "MinorityClassSize"]
-        # meta_features_to_consider = ["rank", "framework", "problem_type"]
-        # # meta_features_to_consider = ["rank", "framework", "MinorityClassSize", "problem_type"]
-        # meta_features_to_consider = ["rank", "framework", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize"]
-        # meta_features_to_consider = [
-        #             "rank",
-        #             "problem_type",
-        #             "MajorityClassSize",
-        #             "MaxNominalAttDistinctValues",
-        #             "MinorityClassSize",
-        #             "NumberOfClasses",
-        #             "NumberOfFeatures",
-        #             "NumberOfInstances",
-        #             "NumberOfInstancesWithMissingValues",
-        #             "NumberOfMissingValues",
-        #             "NumberOfSymbolicFeatures",
-        #             "NumberOfNumericFeatures",
-        #             ]
-
-        # train_meta.drop(columns=train_meta.columns.difference(meta_features_to_consider), inplace=True)
-        # test_meta_new.drop(columns=test_meta_new.columns.difference(meta_features_to_consider), inplace=True)
-        # print(f"remaining columns train: {list(train_meta.columns)}")
-        # print(f"remaining columns test: {list(test_meta_new.columns)}")
+        # print(f"remaining columns val: {list(val_meta.columns)}")
+        # print(f"remaining columns test: {list(test_meta_wo_dataset.columns)}")
 
         # test_meta.drop(['std_dev_rank'], axis=1, inplace=True)
 
         if use_extended_meta_features:
             train_meta = convert_df_ranges_dtypes_fillna(train_meta)
-            test_meta_new = convert_df_ranges_dtypes_fillna(test_meta_new)
+            val_meta = convert_df_ranges_dtypes_fillna(val_meta)
+            test_meta_wo_dataset = convert_df_ranges_dtypes_fillna(test_meta_wo_dataset)
             test_meta = convert_df_ranges_dtypes_fillna(test_meta)
 
         predictor = TabularPredictor(label="rank").fit(
-            train_meta,
+            train_data=train_meta,
+            tuning_data=val_meta,
             # hyperparameters={
             # "RF": {},
             # "DUMMY": {},
             # "GBM": {},
             # },
             # time_limit=7200,
-            # time_limit=1200,
-            time_limit=600,
+            time_limit=1200,
+            # time_limit=600,
             # time_limit=300,
             # time_limit=10,
             # time_limit=30,
             # verbosity=3,
-            excluded_model_types=["CAT"],
+            # excluded_model_types=["CAT"],
             # presets="best_quality",
         )
 
         predictor.leaderboard(data=test_meta, display=True)
 
         # run predict to get the portfolio
-        ranks = predictor.predict(test_meta_new)
+        ranks = predictor.predict(test_meta_wo_dataset)
         rmse_test = np.sqrt(mean_squared_error(test_meta["rank"], ranks))
-        feature_importance_df = predictor.feature_importance(test_meta_new) if use_metalearning_kfdold_training else None
+        feature_importance_df = predictor.feature_importance(test_meta_wo_dataset) if generate_feature_importance else None
 
         all_config_results_per_ds, all_portfolios_per_ds = {}, {}
         all_predicted_ranks_all_datasets = pd.concat([ranks, test_meta["dataset"], test_meta["framework"]], axis=1)
@@ -335,13 +315,15 @@ def zeroshot_results_metalearning(
     # instead of metric_error, let's use the actual task here; also rank them in ascending order
     assert loss in ["metric_error", "metric_error_val", "rank"]
     if use_synthetic_portfolios:
+        # TODO: implement saving / loading portfolio generator object along with updated dd csv
         assert loss == "metric_error", "synthetic portfolios currently only supported for metric_error loss"
         random_portfolio_generator = RandomPortfolioGenerator(repo=repo)
-        metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate(portfolio_size=2, ensemble_size=100, seed=0, backend="ray")
-
+        # metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate(portfolio_size=2, ensemble_size=100, seed=0, backend="ray")
+        metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate_bulk(n_portfolios=3, portfolio_size=2, ensemble_size=100, seed=0, backend="ray")
         dd = dd[[loss, "framework", "task"]]
         # TODO: impute other columns like train time
-        dd = random_portfolio_generator.concatenate(real_errors=dd, synthetic_errors=metric_errors, portfolio_name=portfolio_name)
+        # dd = random_portfolio_generator.concatenate(real_errors=dd, synthetic_errors=metric_errors, portfolio_name=portfolio_name)
+        dd = random_portfolio_generator.concatenate_bulk(real_errors=dd, synthetic_errors=metric_errors, portfolio_name=portfolio_name)
 
     if loss == "rank":
         df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank(ascending=True)
@@ -374,7 +356,7 @@ def zeroshot_results_metalearning(
         print(f"Using kfold training for metalearning")
         dataset_names_input = get_test_dataset_folds(dataset_names, n_splits=5)
         lengths = {fold: len(dataset) for fold, dataset in enumerate(dataset_names_input)}
-        print(f"test datasets per fold and repetition {lengths}")
+        print(f"number of test datasets per fold {lengths}")
     else:
         dataset_names_input = [[ds] for ds in dataset_names]
 
@@ -403,7 +385,7 @@ def zeroshot_results_metalearning(
     mean_test_error = np.mean([result_dct["rmse_test"] for result_dct in result_list])
     print(f"mean rmse on test for {name}: {mean_test_error:.3f}")
 
-    if n_training_datasets and use_metalearning_kfdold_training:
+    if n_training_datasets and generate_feature_importance:
         # n_training_datasets is not None when we do dataset size analysis in which case we deactivate feature importance
         feature_importances = [result_dct["feature_importance_df"] for result_dct in result_list]
         feature_importance_averages = pd.concat(feature_importances).groupby(level=0).mean()
