@@ -351,7 +351,7 @@ if __name__ == "__main__":
             args.extended_mf_landmarking):
         use_extended_mf = True
 
-    assert not (generate_feature_importance and use_metalearning_kfdold_training), "Feature importance can only be generated with kfold training"
+    assert (generate_feature_importance and use_metalearning_kfdold_training), "Feature importance can only be generated with kfold training"
 
     if n_datasets:
         expname += f"-{n_datasets}"
@@ -452,10 +452,10 @@ if __name__ == "__main__":
         #     run_fun=lambda: framework_best_results(framework_types=[None], max_runtimes=[3600, 3600 * 4, 3600 * 24], **experiment_common_kwargs),
         # ),
         # Automl baselines such as Autogluon best, high, medium quality
-        # Experiment(
-        #     expname=expname, name=f"automl-baselines-{expname}",
-        #     run_fun=lambda: automl_results(**experiment_common_kwargs),
-        # ),
+        Experiment(
+            expname=expname, name=f"automl-baselines-{expname}",
+            run_fun=lambda: automl_results(**experiment_common_kwargs),
+        ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-metalearning-{expname}",
         #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
@@ -467,18 +467,18 @@ if __name__ == "__main__":
         #     expname=expname, name=f"zeroshot-{expname}",
         #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs)
         # ),
-        Experiment(
-            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
-            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
-                                                          n_portfolios=[1],
-                                                          name=f"zeroshot-metalearning-singlebest-{expname}",
-                                                          expname=expname,
-                                                          )
-        ),
-        Experiment(
-            expname=expname, name=f"zeroshot-singlebest-{expname}",
-            run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
-        ),
+        # Experiment(
+        #     expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
+        #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
+        #                                                   n_portfolios=[1],
+        #                                                   name=f"zeroshot-metalearning-singlebest-{expname}",
+        #                                                   expname=expname,
+        #                                                   )
+        # ),
+        # Experiment(
+        #     expname=expname, name=f"zeroshot-singlebest-{expname}",
+        #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
+        # ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-maxruntimes",
         #     run_fun=lambda: zeroshot_results(max_runtimes=max_runtimes, **experiment_common_kwargs)
@@ -494,7 +494,7 @@ if __name__ == "__main__":
     ]
 
     # Use more seeds
-    # for seed in range(n_seeds):
+    for seed in range(n_seeds):
         # experiments.append(Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-num-configs-{seed}",
         #     run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs, seed=seed, **experiment_common_kwargs)
@@ -505,48 +505,48 @@ if __name__ == "__main__":
         #     run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets, seed=seed, **experiment_common_kwargs)
         # ))
 
-        # experiments.append(Experiment(
-        #     expname=expname, name=f"zeroshot-singlebest-{expname}-num-configs-{seed}",
-        #     run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs,
-        #                                      n_portfolios=[1],
-        #                                      seed=seed,
-        #                                      **experiment_common_kwargs,
-        #                                      )
-        # ))
-        #
-        # experiments.append(Experiment(
-        #     expname=expname, name=f"zeroshot-singlebest-{expname}-num-training-datasets-{seed}",
-        #     run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets,
-        #                                      n_portfolios=[1],
-        #                                      seed=seed,
-        #                                      **experiment_common_kwargs,
-        #                                      )
-        # ))
-        #
-        # experiments.append(Experiment(
-        #     expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-configs-{seed}",
-        #     run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[1],
-        #                                                   n_training_configs=n_training_configs,
-        #                                                   name=f"zeroshot-metalearning-singlebest-{expname}",
-        #                                                   expname=expname,
-        #                                                   seed=seed,
-        #                                                   **experiment_common_kwargs,
-        #                                                   )
-        # ))
-        #
-        # experiments.append(
-        #     Experiment(
-        #         expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-training-datasets-{seed}",
-        #         run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[1],
-        #                                                       n_training_datasets=n_training_datasets,
-        #                                                       name=f"zeroshot-metalearning-singlebest-{expname}",
-        #                                                       expname=expname,
-        #                                                       seed=seed,
-        #                                                       **experiment_common_kwargs,
-        #                                                       )
-        #     ),
-        #
-        # )
+        experiments.append(Experiment(
+            expname=expname, name=f"zeroshot-singlebest-{expname}-num-configs-{seed}",
+            run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs,
+                                             n_portfolios=[1],
+                                             seed=seed,
+                                             **experiment_common_kwargs,
+                                             )
+        ))
+
+        experiments.append(Experiment(
+            expname=expname, name=f"zeroshot-singlebest-{expname}-num-training-datasets-{seed}",
+            run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets,
+                                             n_portfolios=[1],
+                                             seed=seed,
+                                             **experiment_common_kwargs,
+                                             )
+        ))
+
+        experiments.append(Experiment(
+            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-configs-{seed}",
+            run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[1],
+                                                          n_training_configs=n_training_configs,
+                                                          name=f"zeroshot-metalearning-singlebest-{expname}",
+                                                          expname=expname,
+                                                          seed=seed,
+                                                          **experiment_common_kwargs,
+                                                          )
+        ))
+
+        experiments.append(
+            Experiment(
+                expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-training-datasets-{seed}",
+                run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[1],
+                                                              n_training_datasets=n_training_datasets,
+                                                              name=f"zeroshot-metalearning-singlebest-{expname}",
+                                                              expname=expname,
+                                                              seed=seed,
+                                                              **experiment_common_kwargs,
+                                                              )
+            ),
+
+        )
 
     with catchtime("total time to generate evaluations"):
         df = pd.concat([
@@ -569,7 +569,7 @@ if __name__ == "__main__":
     print(f"Total time of experiments: {total_time_h} hours")
     save_total_runtime_to_file(total_time_h)
 
-    # generate_sensitivity_plots(df, show=True, meta_learning=True)
+    generate_sensitivity_plots(df, show=True, meta_learning=True)
 
     show_latex_table(df, "all", show_table=True, n_digits=n_digits)
     ag_styles = [
@@ -713,4 +713,4 @@ if __name__ == "__main__":
 
     # plot_critical_diagrams(df)
 
-    winrate_comparison(df=df, repo=repo)
+    # winrate_comparison(df=df, repo=repo)

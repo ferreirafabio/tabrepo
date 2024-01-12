@@ -249,7 +249,7 @@ def zeroshot_results_metalearning(
             # time_limit=10,
             # time_limit=30,
             # verbosity=3,
-            # excluded_model_types=["CAT"],
+            excluded_model_types=["CAT"],
             # presets="best_quality",
         )
 
