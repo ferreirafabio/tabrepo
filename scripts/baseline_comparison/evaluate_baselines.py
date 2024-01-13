@@ -225,8 +225,8 @@ def generate_sensitivity_plots(df, exp_name, title, save_name, show: bool = Fals
             ax.grid()
             ax.hlines(df_ag.mean(), xmin=0, xmax=max(dim), color="black", label="AutoGluon", ls="--")
             if i == 0 and j == 0:
-                legend = ax.legend()
-                for text in legend.get_texts():
+                legend_obj = ax.legend()
+                for text in legend_obj.get_texts():
                     text.set_fontsize(8)
             # axes[i][j].set_title("100 configs per framework, time_limit=600")
     # fig_save_path = figure_path() / f"sensitivity.pdf"
@@ -319,19 +319,6 @@ if __name__ == "__main__":
             args.extended_mf_landmarking):
         use_extended_mf = True
 
-    training_type_str = f"{n_splits_kfold}-fold-training" if use_metalearning_kfold_training else "LOO-training"
-    meta_feature_str = f"extended-meta-features" if use_extended_mf else "simple-meta-features"
-
-    exp_title = f"{training_type_str}, {meta_feature_str}"
-    exp_title_save_name = exp_title.replace(' ', '_').replace(',', '')
-
-    save_dir = Paths.data_root / "results-baseline-comparison" / args.repo / exp_title_save_name
-    os.makedirs(save_dir, exist_ok=False)
-
-    args_dict = vars(args)
-    with open(save_dir / "args.json", 'w') as args_file:
-        json.dump(args_dict, args_file, indent=4)
-
     if generate_feature_importance:
         assert use_metalearning_kfold_training, "Feature importance can only be generated with kfold training"
 
@@ -360,7 +347,7 @@ if __name__ == "__main__":
     n_training_datasets = [5, 10, 25, 50, 75, 100, 125, 150, 175, 199]
     # n_training_configs = [1, 5, 10, 25, 50, 75, 100, 125, 150, 175, 200]
     n_training_configs = [1, 5, 10, 25, 50, 75, 100, 125, 150, 175, 200]
-    n_seeds = 3
+    n_seeds = 10
     n_training_folds = [1, 2, 5, 10]
     n_ensembles = [10, 20, 40, 80]
     linestyle_ensemble = "--"
@@ -380,6 +367,22 @@ if __name__ == "__main__":
 
     repo: EvaluationRepository = load_context(version=repo_version, ignore_cache=False, as_paper=as_paper)
     repo.print_info()
+
+    training_type_str = f"{n_splits_kfold}-fold-training" if use_metalearning_kfold_training else "LOO-training"
+    meta_feature_str = f"extended-meta-features" if use_extended_mf else "simple-meta-features"
+    seed_str = f"{n_seeds}-seeds"
+
+    exp_title = f"{training_type_str}, {meta_feature_str}, {seed_str}"
+    exp_title_save_name = exp_title.replace(' ', '_').replace(',', '')
+
+    save_dir = Paths.data_root / "results-baseline-comparison" / args.repo / exp_title_save_name
+    exist_ok = False if ignore_cache else True
+    os.makedirs(save_dir, exist_ok=exist_ok)
+
+    args_dict = vars(args)
+    with open(save_dir / "args.json", 'w') as args_file:
+        json.dump(args_dict, args_file, indent=4)
+
 
     if n_eval_folds == -1:
         n_eval_folds = repo.n_folds()
