@@ -377,10 +377,13 @@ if __name__ == "__main__":
 
     training_type_str = f"{n_splits_kfold}-fold-training" if use_metalearning_kfold_training else "LOO-training"
     meta_feature_str = f"extended-meta-features" if use_extended_mf else "simple-meta-features"
-    synthetic_portfolios_str = f"synthetic_portfolios_{n_synthetic_portfolios}_{synthetic_portfolio_size}" if use_synthetic_portfolios else ""
     seed_str = f"{n_seeds}-seeds"
 
-    exp_title = f"{training_type_str}, {meta_feature_str}, {seed_str}, {synthetic_portfolios_str}"
+    exp_title = f"{training_type_str}, {meta_feature_str}, {seed_str}"
+    if use_synthetic_portfolios:
+        synthetic_portfolios_str = f"synthetic_portfolios_{n_synthetic_portfolios}_{synthetic_portfolio_size}"
+        exp_title += f", {synthetic_portfolios_str}"
+        
     exp_title_save_name = exp_title.replace(' ', '_').replace(',', '')
 
     save_dir = Paths.data_root / "results-baseline-comparison" / args.repo / exp_title_save_name
