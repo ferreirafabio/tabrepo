@@ -64,6 +64,8 @@ def zeroshot_results_metalearning(
         loss: str = "metric_error",
         use_extended_meta_features: bool = False,
         use_synthetic_portfolios: bool = False,
+        n_synthetic_portfolios: int = 1000,
+        synthetic_portfolio_size: int = 2,
         use_metalearning_kfold_training: bool = True,
         n_splits_kfold: int = 5,
         generate_feature_importance: bool = False,
@@ -334,11 +336,12 @@ def zeroshot_results_metalearning(
         assert loss == "metric_error", "synthetic portfolios currently only supported for metric_error loss"
         random_portfolio_generator = RandomPortfolioGenerator(repo=repo)
         # metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate(portfolio_size=2, ensemble_size=100, seed=0, backend="ray")
-        metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate_bulk(n_portfolios=3, portfolio_size=2, ensemble_size=100, seed=0, backend="ray")
+        metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate_bulk(n_portfolios=n_synthetic_portfolios, portfolio_size=synthetic_portfolio_size, ensemble_size=10, seed=0, backend="ray")
         dd = dd[[loss, "framework", "task"]]
         # TODO: impute other columns like train time
         # dd = random_portfolio_generator.concatenate(real_errors=dd, synthetic_errors=metric_errors, portfolio_name=portfolio_name)
         dd = random_portfolio_generator.concatenate_bulk(real_errors=dd, synthetic_errors=metric_errors, portfolio_name=portfolio_name)
+        repo.random_portfolio_generator = random_portfolio_generator
 
     if loss == "rank":
         df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank(ascending=True)

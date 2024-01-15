@@ -266,6 +266,11 @@ if __name__ == "__main__":
                         help="Number of total configs per family to consider")
     parser.add_argument("--use_synthetic_portfolios", action="store_true",
                         help="indicates whether we should add synthetic portfolios to the metalearning train data")
+    parser.add_argument("--n_synthetic_portfolios", type=int, default=1000, required=False,
+                        help="Number of synthetic portfolios used")
+    parser.add_argument("--synthetic_portfolio_size", type=int, default=2, required=False,
+                        help="Size of synthetic portfolios used")
+
     parser.add_argument("--deactivate_metalearning_kfold_training", action="store_true",
                         help="indicates whether we should turn off using kfold training (default: 5 splits) as opposed to leave-one-dataset training. Using this flag increases training and evaluation time.")
     parser.add_argument("--n_splits_kfold", type=int, default=5, required=False,
@@ -310,6 +315,8 @@ if __name__ == "__main__":
     use_metalearning_kfold_training = not args.deactivate_metalearning_kfold_training
     generate_feature_importance = args.generate_feature_importance
     n_splits_kfold = args.n_splits_kfold
+    n_synthetic_portfolios = args.n_synthetic_portfolios
+    synthetic_portfolio_size = args.synthetic_portfolio_size
 
     use_extended_mf = False
     if (args.extended_mf_general or
@@ -370,9 +377,10 @@ if __name__ == "__main__":
 
     training_type_str = f"{n_splits_kfold}-fold-training" if use_metalearning_kfold_training else "LOO-training"
     meta_feature_str = f"extended-meta-features" if use_extended_mf else "simple-meta-features"
+    synthetic_portfolios_str = f"synthetic_portfolios_{n_synthetic_portfolios}_{synthetic_portfolio_size}" if use_synthetic_portfolios else ""
     seed_str = f"{n_seeds}-seeds"
 
-    exp_title = f"{training_type_str}, {meta_feature_str}, {seed_str}"
+    exp_title = f"{training_type_str}, {meta_feature_str}, {seed_str}, {synthetic_portfolios_str}"
     exp_title_save_name = exp_title.replace(' ', '_').replace(',', '')
 
     save_dir = Paths.data_root / "results-baseline-comparison" / args.repo / exp_title_save_name
@@ -419,6 +427,8 @@ if __name__ == "__main__":
         use_extended_meta_features=use_extended_mf,
         loss=loss,
         use_synthetic_portfolios=use_synthetic_portfolios,
+        synthetic_portfolio_size=synthetic_portfolio_size,
+        n_synthetic_portfolios=n_synthetic_portfolios,
         use_metalearning_kfold_training=use_metalearning_kfold_training,
         generate_feature_importance=generate_feature_importance,
         n_splits_kfold=n_splits_kfold,

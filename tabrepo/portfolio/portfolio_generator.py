@@ -84,9 +84,10 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
 
         return metric_errors, ensemble_weights, portfolio_name
 
-    def generate_evaluate_bulk(self, n_portfolios: int, portfolio_size: int, seed: int = 0, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, backend: str = "ray"):
+    def generate_evaluate_bulk(self, n_portfolios: int, portfolio_size: int, seed: int = 0, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 10, backend: str = "ray"):
         metric_errors_bulk, ensemble_weights_bulk, portfolio_name_bulk = [], [], []
         for i in range(n_portfolios):
+            print(f"processing synthetic portfolio {i}/{n_portfolios}")
             metric_errors, ensemble_weights, portfolio_name = self.generate_evaluate(portfolio_size=portfolio_size, datasets=datasets, folds=folds, ensemble_size=ensemble_size, n_portfolio_iter=i, seed=seed, backend=backend)
             metric_errors_bulk.append(metric_errors)
             ensemble_weights_bulk.append(ensemble_weights)
