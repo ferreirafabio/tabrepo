@@ -388,6 +388,7 @@ if __name__ == "__main__":
 
     save_dir = Paths.data_root / "results-baseline-comparison" / args.repo / exp_title_save_name
     exist_ok = False if ignore_cache else True
+    results_dir = Paths.data_root / "results-baseline-comparison"
     os.makedirs(save_dir, exist_ok=exist_ok)
 
     args_dict = vars(args)
@@ -436,6 +437,7 @@ if __name__ == "__main__":
         generate_feature_importance=generate_feature_importance,
         n_splits_kfold=n_splits_kfold,
         save_name=exp_title_save_name,
+        results_dir=results_dir,
     )
 
     experiments = [

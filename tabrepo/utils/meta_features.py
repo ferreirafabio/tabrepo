@@ -11,7 +11,6 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
-
 def load_extended_meta_features(repo, args, rewrite_csvs=False):
     if not (args.extended_mf_general or
             args.extended_mf_statistical or

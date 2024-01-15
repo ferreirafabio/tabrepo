@@ -5,6 +5,8 @@ from typing import List, Tuple
 from tabrepo import EvaluationRepository
 import pandas as pd
 import numpy as np
+import pickle
+import os
 
 
 class AbstractPortfolioGenerator:
@@ -62,11 +64,23 @@ class AbstractPortfolioGenerator:
         metric_errors = metric_errors[["metric_error", "framework", "task"]]
         return metric_errors
 
+    def save_generator(self, file_path: str):
+        with open(file_path, 'wb') as file:
+            pickle.dump(self, file)
+
+    @classmethod
+    def load_generator(cls, file_path: str):
+        with open(file_path, 'rb') as file:
+            return pickle.load(file)
+
 
 class RandomPortfolioGenerator(AbstractPortfolioGenerator):
     def __init__(self, repo: EvaluationRepository):
         super().__init__(repo=repo)
         self.generated_portfolios = {}
+        self.metric_errors = []
+        self.ensemble_weights = []
+        self.portfolio_name = []
 
     def generate(self, portfolio_size: int, seed: int = 0) -> List[str]:
         rng = np.random.default_rng(seed=seed)
@@ -87,12 +101,15 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
     def generate_evaluate_bulk(self, n_portfolios: int, portfolio_size: int, seed: int = 0, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 10, backend: str = "ray"):
         metric_errors_bulk, ensemble_weights_bulk, portfolio_name_bulk = [], [], []
         for i in range(n_portfolios):
-            print(f"processing synthetic portfolio {i}/{n_portfolios}")
             metric_errors, ensemble_weights, portfolio_name = self.generate_evaluate(portfolio_size=portfolio_size, datasets=datasets, folds=folds, ensemble_size=ensemble_size, n_portfolio_iter=i, seed=seed, backend=backend)
+            print(f"processing synthetic portfolio {i}/{n_portfolios}")
             metric_errors_bulk.append(metric_errors)
             ensemble_weights_bulk.append(ensemble_weights)
             portfolio_name_bulk.append(portfolio_name)
 
+        self.metric_errors = metric_errors_bulk
+        self.ensemble_weights = ensemble_weights_bulk
+        self.portfolio_name = portfolio_name_bulk
         return metric_errors_bulk, ensemble_weights_bulk, portfolio_name_bulk
 
 

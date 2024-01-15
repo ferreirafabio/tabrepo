@@ -15,7 +15,7 @@ from scripts.baseline_comparison.meta_learning_utils import (
     get_test_dataset_folds,
     get_train_val_split,
 )
-from tabrepo.portfolio.portfolio_generator import RandomPortfolioGenerator
+from tabrepo.portfolio.portfolio_generator import RandomPortfolioGenerator, AbstractPortfolioGenerator
 
 from sklearn.metrics import mean_squared_error
 from tabrepo.repository import EvaluationRepository
@@ -71,6 +71,7 @@ def zeroshot_results_metalearning(
         generate_feature_importance: bool = False,
         seed: int = 0,
         save_name: int = "experiment",
+        results_dir: str = "",
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -334,12 +335,22 @@ def zeroshot_results_metalearning(
     if use_synthetic_portfolios:
         # TODO: implement saving / loading portfolio generator object along with updated dd csv
         assert loss == "metric_error", "synthetic portfolios currently only supported for metric_error loss"
-        random_portfolio_generator = RandomPortfolioGenerator(repo=repo)
-        # metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate(portfolio_size=2, ensemble_size=100, seed=0, backend="ray")
-        metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate_bulk(n_portfolios=n_synthetic_portfolios, portfolio_size=synthetic_portfolio_size, ensemble_size=10, seed=0, backend="ray")
+        generator_file_path = results_dir / f"random_portfolio_generator_{n_synthetic_portfolios}_{synthetic_portfolio_size}.pkl"
+
+        if os.path.exists(generator_file_path):
+            random_portfolio_generator = AbstractPortfolioGenerator.load_generator(generator_file_path)
+            metric_errors = random_portfolio_generator.metric_errors
+            ensemble_weights = random_portfolio_generator.ensemble_weights
+            portfolio_name = random_portfolio_generator.portfolio_name
+            print(f"Loaded random portfolio generator: {generator_file_path}.")
+        else:
+            print(f"No previous random portfolio generator found for settings {n_synthetic_portfolios=} and {synthetic_portfolio_size=}. Generating anew.")
+            random_portfolio_generator = RandomPortfolioGenerator(repo=repo)
+            metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate_bulk(n_portfolios=n_synthetic_portfolios, portfolio_size=synthetic_portfolio_size, ensemble_size=2, seed=0, backend="ray")
+            random_portfolio_generator.save_generator(generator_file_path)
+
         dd = dd[[loss, "framework", "task"]]
         # TODO: impute other columns like train time
-        # dd = random_portfolio_generator.concatenate(real_errors=dd, synthetic_errors=metric_errors, portfolio_name=portfolio_name)
         dd = random_portfolio_generator.concatenate_bulk(real_errors=dd, synthetic_errors=metric_errors, portfolio_name=portfolio_name)
         repo.random_portfolio_generator = random_portfolio_generator
 
