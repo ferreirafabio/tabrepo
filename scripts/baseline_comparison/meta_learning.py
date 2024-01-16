@@ -346,7 +346,7 @@ def zeroshot_results_metalearning(
         else:
             print(f"No previous random portfolio generator found for settings {n_synthetic_portfolios=} and {synthetic_portfolio_size=}. Generating anew.")
             random_portfolio_generator = RandomPortfolioGenerator(repo=repo)
-            metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate_bulk(n_portfolios=n_synthetic_portfolios, portfolio_size=synthetic_portfolio_size, ensemble_size=2, seed=0, backend="ray")
+            metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate_bulk(n_portfolios=n_synthetic_portfolios, portfolio_size=synthetic_portfolio_size, ensemble_size=100, seed=seed, backend="ray")
             random_portfolio_generator.save_generator(generator_file_path)
 
         dd = dd[[loss, "framework", "task"]]

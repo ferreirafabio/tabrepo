@@ -87,8 +87,8 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
         return list(rng.choice(self.repo.configs(), portfolio_size, replace=False))
 
     def generate_evaluate(self, portfolio_size: int, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, n_portfolio_iter: int = 0, seed: int = 0, backend: str = "ray"):
-        # required to get varied portfolios in case of generate_evalute_bulk but remains deterministic
-        seed_generator = seed+n_portfolio_iter if n_portfolio_iter > 0 else seed
+        # ensure to get deterministic variance in portfolios generated
+        seed_generator = seed+n_portfolio_iter
 
         portfolio = self.generate(portfolio_size=portfolio_size, seed=seed_generator)
         metric_errors, ensemble_weights = self.evaluate(portfolio=portfolio, datasets=datasets, folds=folds, ensemble_size=ensemble_size, backend=backend)
@@ -98,7 +98,7 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
 
         return metric_errors, ensemble_weights, portfolio_name
 
-    def generate_evaluate_bulk(self, n_portfolios: int, portfolio_size: int, seed: int = 0, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 10, backend: str = "ray"):
+    def generate_evaluate_bulk(self, n_portfolios: int, portfolio_size: int, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 10, seed: int = 0, backend: str = "ray"):
         metric_errors_bulk, ensemble_weights_bulk, portfolio_name_bulk = [], [], []
         for i in range(n_portfolios):
             metric_errors, ensemble_weights, portfolio_name = self.generate_evaluate(portfolio_size=portfolio_size, datasets=datasets, folds=folds, ensemble_size=ensemble_size, n_portfolio_iter=i, seed=seed, backend=backend)
