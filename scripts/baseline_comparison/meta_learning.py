@@ -65,7 +65,7 @@ def zeroshot_results_metalearning(
         use_extended_meta_features: bool = False,
         use_synthetic_portfolios: bool = False,
         n_synthetic_portfolios: int = 1000,
-        synthetic_portfolio_size: int = 2,
+        portfolio_size: int = 2,
         use_metalearning_kfold_training: bool = True,
         n_splits_kfold: int = 5,
         generate_feature_importance: bool = False,
@@ -239,12 +239,7 @@ def zeroshot_results_metalearning(
             test_meta_wo_dataset = convert_df_ranges_dtypes_fillna(test_meta_wo_dataset)
             test_meta = convert_df_ranges_dtypes_fillna(test_meta)
 
-
-        # mean rmse on test for zeroshot-metalearning-singlebest-D244_F3_C1416: 239.186
-        # Time for Evaluate function.: 177.7311 secs
-
-        # mean rmse on test for zeroshot-metalearning-singlebest-D244_F3_C1416: 241.159
-        # Time for Evaluate function.: 35.8212 secs
+        assert (len(train_meta["framework"].unique()) == len(list(df_rank.index)))
         predictor = TabularPredictor(label="rank").fit(
             train_data=train_meta,
             tuning_data=val_meta,
@@ -332,10 +327,11 @@ def zeroshot_results_metalearning(
 
     # instead of metric_error, let's use the actual task here; also rank them in ascending order
     assert loss in ["metric_error", "metric_error_val", "rank"]
+    random_portfolio_generator = None
     if use_synthetic_portfolios:
         # TODO: implement saving / loading portfolio generator object along with updated dd csv
         assert loss == "metric_error", "synthetic portfolios currently only supported for metric_error loss"
-        generator_file_path = results_dir / f"random_portfolio_generator_{n_synthetic_portfolios}_{synthetic_portfolio_size}.pkl"
+        generator_file_path = results_dir / f"random_portfolio_generator_{n_synthetic_portfolios}_{portfolio_size}.pkl"
 
         if os.path.exists(generator_file_path):
             random_portfolio_generator = AbstractPortfolioGenerator.load_generator(generator_file_path)
@@ -344,9 +340,9 @@ def zeroshot_results_metalearning(
             portfolio_name = random_portfolio_generator.portfolio_name
             print(f"Loaded random portfolio generator: {generator_file_path}.")
         else:
-            print(f"No previous random portfolio generator found for settings {n_synthetic_portfolios=} and {synthetic_portfolio_size=}. Generating anew.")
+            print(f"No previous random portfolio generator found for settings {n_synthetic_portfolios=} and {portfolio_size=}. Generating anew.")
             random_portfolio_generator = RandomPortfolioGenerator(repo=repo)
-            metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate_bulk(n_portfolios=n_synthetic_portfolios, portfolio_size=synthetic_portfolio_size, ensemble_size=100, seed=seed, backend="ray")
+            metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate_bulk(n_portfolios=n_synthetic_portfolios, portfolio_size=portfolio_size, ensemble_size=100, seed=seed, backend="ray")
             random_portfolio_generator.save_generator(generator_file_path)
 
         dd = dd[[loss, "framework", "task"]]
@@ -380,6 +376,9 @@ def zeroshot_results_metalearning(
         framework: sorted([x for x in repo.configs() if framework in x])
         for framework in framework_types
     }
+    if random_portfolio_generator and random_portfolio_generator.generated_portfolios:
+        model_frameworks = model_frameworks.copy()
+        model_frameworks["ensemble"] = list(random_portfolio_generator.generated_portfolios.keys())
 
     if use_metalearning_kfold_training:
         print(f"Using kfold training for metalearning")

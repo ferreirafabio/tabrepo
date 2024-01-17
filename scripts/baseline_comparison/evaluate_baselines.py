@@ -37,7 +37,7 @@ from scripts.baseline_comparison.baselines import (
 from scripts.baseline_comparison.meta_learning import zeroshot_results_metalearning
 from tabrepo.utils.meta_features import load_extended_meta_features
 from scripts.baseline_comparison.compare_results import winrate_comparison
-from scripts.baseline_comparison.visualize_config_selected import visualize_config_selected
+from scripts.baseline_comparison.vis_utils import visualize_config_selected
 from scripts.baseline_comparison.plot_utils import (
     MethodStyle,
     show_latex_table,
@@ -268,7 +268,7 @@ if __name__ == "__main__":
                         help="indicates whether we should add synthetic portfolios to the metalearning train data")
     parser.add_argument("--n_synthetic_portfolios", type=int, default=1000, required=False,
                         help="Number of synthetic portfolios used")
-    parser.add_argument("--synthetic_portfolio_size", type=int, default=2, required=False,
+    parser.add_argument("--portfolio_size", type=int, default=1, required=False,
                         help="Size of synthetic portfolios used")
 
     parser.add_argument("--deactivate_metalearning_kfold_training", action="store_true",
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     generate_feature_importance = args.generate_feature_importance
     n_splits_kfold = args.n_splits_kfold
     n_synthetic_portfolios = args.n_synthetic_portfolios
-    synthetic_portfolio_size = args.synthetic_portfolio_size
+    portfolio_size = args.portfolio_size
 
     use_extended_mf = False
     if (args.extended_mf_general or
@@ -381,7 +381,7 @@ if __name__ == "__main__":
 
     exp_title = f"{training_type_str}, {meta_feature_str}, {seed_str}"
     if use_synthetic_portfolios:
-        synthetic_portfolios_str = f"synthetic_portfolios_{n_synthetic_portfolios}_{synthetic_portfolio_size}"
+        synthetic_portfolios_str = f"synthetic_portfolios_{n_synthetic_portfolios}_{portfolio_size}"
         exp_title += f", {synthetic_portfolios_str}"
         
     exp_title_save_name = exp_title.replace(' ', '_').replace(',', '')
@@ -394,7 +394,6 @@ if __name__ == "__main__":
     args_dict = vars(args)
     with open(save_dir / "args.json", 'w') as args_file:
         json.dump(args_dict, args_file, indent=4)
-
 
     if n_eval_folds == -1:
         n_eval_folds = repo.n_folds()
@@ -431,7 +430,7 @@ if __name__ == "__main__":
         use_extended_meta_features=use_extended_mf,
         loss=loss,
         use_synthetic_portfolios=use_synthetic_portfolios,
-        synthetic_portfolio_size=synthetic_portfolio_size,
+        portfolio_size=portfolio_size,
         n_synthetic_portfolios=n_synthetic_portfolios,
         use_metalearning_kfold_training=use_metalearning_kfold_training,
         generate_feature_importance=generate_feature_importance,
@@ -453,11 +452,6 @@ if __name__ == "__main__":
         #     expname=expname, name=f"framework-all-best-{expname}",
         #     run_fun=lambda: framework_best_results(framework_types=[None], max_runtimes=[3600, 3600 * 4, 3600 * 24], **experiment_common_kwargs),
         # ),
-        # Automl baselines such as Autogluon best, high, medium quality
-        Experiment(
-            expname=expname, name=f"automl-baselines-{expname}",
-            run_fun=lambda: automl_results(**experiment_common_kwargs),
-        ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-metalearning-{expname}",
         #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
@@ -472,14 +466,20 @@ if __name__ == "__main__":
         Experiment(
             expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
             run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
-                                                          n_portfolios=[1],
+                                                          n_portfolios=[portfolio_size],
                                                           name=f"zeroshot-metalearning-singlebest-{expname}",
                                                           expname=expname,
+                                                          max_runtimes=[None],
                                                           )
         ),
         Experiment(
             expname=expname, name=f"zeroshot-singlebest-{expname}",
-            run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[1])
+            run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[portfolio_size])
+        ),
+        # Automl baselines such as Autogluon best, high, medium quality
+        Experiment(
+            expname=expname, name=f"automl-baselines-{expname}",
+            run_fun=lambda: automl_results(**experiment_common_kwargs),
         ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-maxruntimes",
@@ -511,7 +511,7 @@ if __name__ == "__main__":
         experiments.append(Experiment(
             expname=expname, name=f"zeroshot-singlebest-{expname}-num-configs-{seed}",
             run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs,
-                                             n_portfolios=[1],
+                                             n_portfolios=[portfolio_size],
                                              seed=seed,
                                              **experiment_common_kwargs,
                                              )
@@ -520,7 +520,7 @@ if __name__ == "__main__":
         experiments.append(Experiment(
             expname=expname, name=f"zeroshot-singlebest-{expname}-num-training-datasets-{seed}",
             run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets,
-                                             n_portfolios=[1],
+                                             n_portfolios=[portfolio_size],
                                              seed=seed,
                                              **experiment_common_kwargs,
                                              )
@@ -528,7 +528,7 @@ if __name__ == "__main__":
 
         experiments.append(Experiment(
             expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-configs-{seed}",
-            run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[1],
+            run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[portfolio_size],
                                                           n_training_configs=n_training_configs,
                                                           name=f"zeroshot-metalearning-singlebest-{expname}",
                                                           expname=expname,
@@ -540,7 +540,7 @@ if __name__ == "__main__":
         experiments.append(
             Experiment(
                 expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-training-datasets-{seed}",
-                run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[1],
+                run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[portfolio_size],
                                                               n_training_datasets=n_training_datasets,
                                                               name=f"zeroshot-metalearning-singlebest-{expname}",
                                                               expname=expname,
