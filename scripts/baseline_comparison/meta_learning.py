@@ -279,7 +279,15 @@ def zeroshot_results_metalearning(
         for test_ds in test_datasets:
             ranks_per_ds = all_predicted_ranks_all_datasets[all_predicted_ranks_all_datasets['dataset'] == test_ds]
             ranks_per_ds = ranks_per_ds.sort_values(by="rank", ascending=True)
-            portfolio_configs_per_ds = ranks_per_ds[:n_portfolio]["framework"].tolist()
+            if use_synthetic_portfolios:
+                # the portfolio size is in this case defined by the synthetic_portfolio_size
+                framework_name = ranks_per_ds.iloc[0]["framework"]
+                if framework_name.startswith("Portfolio"):
+                    portfolio_configs_per_ds = repo.random_portfolio_generator.generated_portfolios[framework_name]
+                else:
+                    portfolio_configs_per_ds = [framework_name]
+            else:
+                portfolio_configs_per_ds = ranks_per_ds[:n_portfolio]["framework"].tolist()
 
             # TODO: Technically we should exclude data from the fold when computing the average runtime and also pass the
             #  current fold when filtering by runtime.
