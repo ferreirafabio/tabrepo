@@ -189,12 +189,14 @@ def generate_sensitivity_plots(df, exp_name, title, save_name, show: bool = Fals
                 lambda s: int(s.replace(" (ensemble) (4h)", "").split("-")[-1][1:]))
             df_portfolio = df_portfolio[df_portfolio[dimension] > 1]
 
+            portfolio_ensemble_size = int(df_portfolio['method'].iloc[0].split('Portfolio-N')[1].split('-')[0])
+
             dim, mean, sem = df_portfolio.loc[:, [dimension, metric]].groupby(dimension).agg(
                 ["mean", "sem"]).reset_index().values.T
             ax = axes[j][i]
             ax.errorbar(
                 dim, mean, sem,
-                label="zeroshot singlebest N1",
+                label=f"zeroshot N{portfolio_ensemble_size}",
                 linestyle="",
                 marker="o",
             )
@@ -207,12 +209,14 @@ def generate_sensitivity_plots(df, exp_name, title, save_name, show: bool = Fals
                     lambda s: int(s.replace("metalearning (ensemble) (4h)", "").split("-")[-1][1:]))
                 df_portfolio_metalearning = df_portfolio_metalearning[df_portfolio_metalearning[dimension] > 1]
 
+                portfolio_ensemble_size = int(df_portfolio_metalearning['method'].iloc[0].split('Portfolio-N')[1].split('-')[0])
+
                 dim, mean, sem = df_portfolio_metalearning.loc[:, [dimension, metric]].groupby(dimension).agg(
                     ["mean", "sem"]).reset_index().values.T
                 ax = axes[j][i]
                 ax.errorbar(
                     dim, mean, sem,
-                    label="zeroshot singlebest N1 Metalearning",
+                    label=f"zeroshot N{portfolio_ensemble_size} Metalearning",
                     linestyle="",
                     marker="o",
                 )

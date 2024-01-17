@@ -91,7 +91,7 @@ def zeroshot_results_metalearning(
 
     def evaluate_dataset(test_datasets, n_portfolio, n_ensemble, n_training_dataset, n_training_fold, n_training_config,
                          max_runtime, repo: EvaluationRepository, df_rank, rank_scorer, normalized_scorer,
-                         model_frameworks, use_meta_features, seed, use_metalearning_kfold_training):
+                         model_frameworks, use_meta_features, seed):
         method_name = zeroshot_name(
             n_portfolio=n_portfolio,
             n_ensemble=n_ensemble,
@@ -413,7 +413,6 @@ def zeroshot_results_metalearning(
                      model_frameworks=model_frameworks,
                      use_meta_features=use_meta_features,
                      seed=seed,
-                     use_metalearning_kfold_training=use_metalearning_kfold_training,
                      ),
         engine=engine,
     )
