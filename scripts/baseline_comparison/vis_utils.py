@@ -16,8 +16,9 @@ def visualize_config_selected(exp_name, title, save_name, top_n_configs=10):
     # Define method names
     # method1 = 'Portfolio-N200 metalearning (ensemble) (4h)'
     # method2 = 'Portfolio-N200 (ensemble) (4h)'
-    method1 = 'Portfolio-N1 metalearning (ensemble) (4h)'
-    method2 = 'Portfolio-N1 (ensemble) (4h)'
+    method_base_name = df['method'].str.extract(r'(Portfolio-N2)').dropna()[0].unique()[0]
+    method1 = f'{method_base_name} metalearning (ensemble)'
+    method2 = f'{method_base_name} (ensemble) (4h)'
 
     # Extract relevant columns
     df = df[df["method"].str.contains(r'^Portfolio', regex=True, na=False)]
@@ -57,7 +58,7 @@ def visualize_config_selected(exp_name, title, save_name, top_n_configs=10):
     df_method2 = pd.DataFrame(list(top_n_configs_method2.items()), columns=['Config', method2])
 
     # Plot individual subplots for each method
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5))
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(24, 12))
 
     # Plot for method1
     df_method1.plot(x='Config', kind='bar', ax=axes[0], width=0.8, color='skyblue')
@@ -70,6 +71,10 @@ def visualize_config_selected(exp_name, title, save_name, top_n_configs=10):
     axes[1].set_title(method2)
     # axes[1].set_xlabel('Config')
     axes[1].set_ylabel('Freq. across all folds / datasets')
+
+    axes[0].tick_params(axis='x', rotation=45, labelsize=12)
+    axes[1].tick_params(axis='x', rotation=45, labelsize=12)
+
     fig.suptitle(f"{exp_name}, {title}")
 
     plt.tight_layout()
