@@ -244,7 +244,7 @@ def generate_sensitivity_plots(df, exp_name, title, save_name, show: bool = Fals
         plt.show()
 
 
-def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, show: bool = False):
+def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, max_runtimes, show: bool = False):
     # show stds
     fig, axes = plt.subplots(2, 1, sharex='col', sharey='row', figsize=(20, 8))
 
@@ -252,18 +252,22 @@ def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, sh
         # ("M", "Number of configuration per family"),
         ("N", "Portfolio size"),
     ]
+    # TODO: filter df's according to max_runtimes
+    if max_runtimes and max_runtimes[0] is not None:
+        max_runtimes_in_h = max_runtimes[0] // 3600
 
     methods = df["method"].unique()
     with_metalearning = [method for method in methods if 'metalearning' in method]
-    without_metalearning = [method for method in methods if 'metalearning' not in method and "AutoGluon" not in method]
+    without_metalearning = [method for method in methods if 'metalearning' not in method and "ensemble" in method]
 
     for i, (dimension, legend) in enumerate(dimensions):
         for j, metric in enumerate(["normalized-error", "rank"]):
             df_portfolio = df.loc[df.method.isin(without_metalearning)].copy()
 
-            df_ag = df.loc[df.method.str.contains("AutoGluon best \(4h\)"), metric].copy()
+            # df_ag = df.loc[df.method.str.contains("AutoGluon best \(4h\)"), metric].copy()
+            df_ag = df.loc[df.method.str.contains("AutoGluon best"), metric].copy()
             df_portfolio.loc[:, dimension] = df_portfolio.loc[:, "method"].apply(
-                lambda s: int(s.replace(" (ensemble) (4h)", "").split("-")[-1][1:]))
+                lambda s: int(s.replace(" (ensemble)", "").split("-")[-1][1:]))
             df_portfolio = df_portfolio[df_portfolio[dimension] > 1]
 
             dim, mean, sem = df_portfolio.loc[:, [dimension, metric]].groupby(dimension).agg(
@@ -321,7 +325,7 @@ def save_total_runtime_to_file(total_time_h):
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416_30")
+    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416")
     parser.add_argument("--n_folds", type=int, default=-1, required=False,
                         help="Number of folds to consider when evaluating all baselines. Uses all if set to -1.")
     parser.add_argument("--n_datasets", type=int, required=False, help="Number of datasets to consider when evaluating all baselines.")
@@ -420,7 +424,8 @@ if __name__ == "__main__":
 
     n_eval_folds = args.n_folds
     # n_portfolios = [5, 10, 50, 100, n_portfolios_default]
-    n_portfolios = [2, 3, 4, 5, 10]
+    n_portfolios = [2, 3, 4, 5, 10, 20]
+    # n_portfolios = [2, 3]
     max_runtimes = [300, 600, 1800, 3600, 3600 * 4, 24 * 3600]
     # n_training_datasets = list(range(10, 210, 10))
     # n_training_configs = list(range(10, 210, 10))
@@ -453,6 +458,7 @@ if __name__ == "__main__":
     meta_feature_str = f"extended-meta-features" if use_extended_mf else "simple-meta-features"
     seed_str = f"{n_seeds}-seeds"
 
+
     exp_title = f"{training_type_str}, {meta_feature_str}, {seed_str}"
     current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
     if use_synthetic_portfolios:
@@ -463,7 +469,7 @@ if __name__ == "__main__":
     exp_title_save_name += f"_{current_time}"
 
     save_dir = Paths.data_root / "results-baseline-comparison" / args.repo / exp_title_save_name
-    results_dir = Paths.data_root / "results-baseline-comparison"
+    results_dir = Paths.data_root / "results-baseline-comparison" / args.repo
     os.makedirs(save_dir)
 
     args_dict = vars(args)
@@ -511,6 +517,7 @@ if __name__ == "__main__":
         n_splits_kfold=n_splits_kfold,
         save_name=exp_title_save_name,
         results_dir=results_dir,
+        ray_process_ratio=ray_process_ratio,
     )
 
     experiments = [
@@ -574,6 +581,34 @@ if __name__ == "__main__":
     # Use more seeds
     for seed in range(n_seeds):
         print(f"running seed {seed}")
+
+        experiments.append(
+            Experiment(
+                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-{seed}",
+                run_fun=lambda s=seed: zeroshot_results_metalearning(
+                              n_portfolios=n_portfolios,
+                              name=f"zeroshot-metalearning-synthetic-portfolios-{expname}",
+                              expname=expname,
+                              max_runtimes=[None],
+                              seed=s,
+                              **experiment_common_kwargs,
+                              )
+            )
+        )
+
+        experiments.append(Experiment(
+            expname=expname, name=f"zeroshot-{expname}-num-portfolios-{seed}",
+            run_fun=lambda s=seed: zeroshot_results(n_portfolios=n_portfolios, max_runtimes=[None], seed=s, **experiment_common_kwargs)
+            ))
+
+
+
+        # # Automl baselines such as Autogluon best, high, medium quality
+        # experiments.append(Experiment(
+        #     expname=expname, name=f"automl-baselines-{expname}",
+        #     run_fun=lambda: automl_results(n_portfolios=n_portfolios, max_runtimes=[None], **experiment_common_kwargs),
+        # ))
+
         # experiments.append(Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-num-configs-{seed}",
         #     run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs, seed=seed, **experiment_common_kwargs)
@@ -627,32 +662,6 @@ if __name__ == "__main__":
         #                       )
         #     ),
 
-        experiments.append(
-            Experiment(
-                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-{seed}",
-                run_fun=lambda: zeroshot_results_metalearning(
-                              n_portfolios=n_portfolios,
-                              name=f"zeroshot-metalearning-synthetic-portfolios-{expname}",
-                              expname=expname,
-                              max_runtimes=[None],
-                              seed=seed,
-                              **experiment_common_kwargs,
-                              )
-            ),
-
-        )
-        experiments.append(
-            Experiment(
-                expname=expname, name=f"zeroshot-{expname}-num-portfolios-{seed}",
-                run_fun=lambda: zeroshot_results(
-                    n_portfolios=n_portfolios,
-                    seed=seed,
-                    **experiment_common_kwargs,
-                )
-            ),
-        )
-
-
 
     with catchtime("total time to generate evaluations"):
         df = pd.concat([
@@ -674,9 +683,9 @@ if __name__ == "__main__":
     save_total_runtime_to_file(total_time_h)
 
     # generate_sensitivity_plots(df, exp_name=args.repo, title=exp_title, save_name=exp_title_save_name, show=True, meta_learning=True)
-    generate_sensitivity_plots_num_portfolios(df, exp_name=args.repo, title=exp_title, save_name=exp_title_save_name, show=True)
+    generate_sensitivity_plots_num_portfolios(df, exp_name=args.repo, title=exp_title, save_name=exp_title_save_name, max_runtimes=max_runtimes, show=True)
 
-    visualize_config_selected(exp_name=args.repo, title=exp_title, save_name=exp_title_save_name)
+    # visualize_config_selected(exp_name=args.repo, title=exp_title, save_name=exp_title_save_name)
 
     show_latex_table(df, "all", show_table=True, n_digits=n_digits)
     ag_styles = [
@@ -820,4 +829,4 @@ if __name__ == "__main__":
 
     # plot_critical_diagrams(df)
 
-    winrate_comparison(df=df, repo=repo)
+    # winrate_comparison(df=df, repo=repo)

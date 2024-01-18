@@ -104,6 +104,7 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
             print(f"generating synthetic portfolio of size {p_s}")
             metric_errors_ps, ensemble_weights_ps, portfolio_name_ps = [], [], []
             for i in range(n_portfolios):
+                print(f"generating portfolio {i}/{n_portfolios}")
                 metric_errors, ensemble_weights, portfolio_name = self.generate_evaluate(portfolio_size=p_s, datasets=datasets, folds=folds, ensemble_size=ensemble_size, n_portfolio_iter=i, seed=seed, backend=backend)
                 metric_errors_ps.append(metric_errors)
                 ensemble_weights_ps.append(ensemble_weights)
