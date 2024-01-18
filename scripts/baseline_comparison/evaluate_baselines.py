@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import json
 import matplotlib
+import numpy as np
 import sys
 from pathlib import Path
 import random
@@ -245,53 +246,53 @@ def generate_sensitivity_plots(df, exp_name, title, save_name, show: bool = Fals
 
 def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, show: bool = False):
     # show stds
-    fig, axes = plt.subplots(2, 1, sharex='col', sharey='row', figsize=(9, 4))
+    fig, axes = plt.subplots(2, 1, sharex='col', sharey='row', figsize=(20, 8))
 
     dimensions = [
         # ("M", "Number of configuration per family"),
-        ("D", "Portfolio size to fit"),
+        ("N", "Portfolio size"),
     ]
+
+    methods = df["method"].unique()
+    with_metalearning = [method for method in methods if 'metalearning' in method]
+    without_metalearning = [method for method in methods if 'metalearning' not in method and "AutoGluon" not in method]
+
     for i, (dimension, legend) in enumerate(dimensions):
         for j, metric in enumerate(["normalized-error", "rank"]):
-            df_portfolio = df.loc[df.method.str.contains(f"Portfolio-N.*-{dimension}(?!.*metalearning).*4h"), :].copy()
+            df_portfolio = df.loc[df.method.isin(without_metalearning)].copy()
+
             df_ag = df.loc[df.method.str.contains("AutoGluon best \(4h\)"), metric].copy()
             df_portfolio.loc[:, dimension] = df_portfolio.loc[:, "method"].apply(
                 lambda s: int(s.replace(" (ensemble) (4h)", "").split("-")[-1][1:]))
             df_portfolio = df_portfolio[df_portfolio[dimension] > 1]
 
-            portfolio_ensemble_size = int(df_portfolio['method'].iloc[0].split('Portfolio-N')[1].split('-')[0])
-
             dim, mean, sem = df_portfolio.loc[:, [dimension, metric]].groupby(dimension).agg(
                 ["mean", "sem"]).reset_index().values.T
-            ax = axes[j][i]
+            ax = axes[j]
             ax.errorbar(
                 dim, mean, sem,
-                label=f"zeroshot N{portfolio_ensemble_size}",
+                label=f"zeroshot",
                 linestyle="",
                 marker="o",
             )
 
-            if meta_learning:
-                df_portfolio_metalearning = df.loc[
-                                            df.method.str.contains(f"Portfolio-N.*-{dimension}.*metalearning.*4h"),
-                                            :].copy()
-                df_portfolio_metalearning.loc[:, dimension] = df_portfolio_metalearning.loc[:, "method"].apply(
-                    lambda s: int(s.replace("metalearning (ensemble) (4h)", "").split("-")[-1][1:]))
-                df_portfolio_metalearning = df_portfolio_metalearning[df_portfolio_metalearning[dimension] > 1]
+            df_portfolio_metalearning = df.loc[df.method.isin(with_metalearning)].copy()
+            df_portfolio_metalearning.loc[:, dimension] = df_portfolio_metalearning.loc[:, "method"].apply(
+                lambda s: int(s.replace("metalearning (ensemble)", "").split("-")[-1][1:]))
+            df_portfolio_metalearning = df_portfolio_metalearning[df_portfolio_metalearning[dimension] > 1]
 
-                portfolio_ensemble_size = int(df_portfolio_metalearning['method'].iloc[0].split('Portfolio-N')[1].split('-')[0])
-
-                dim, mean, sem = df_portfolio_metalearning.loc[:, [dimension, metric]].groupby(dimension).agg(
-                    ["mean", "sem"]).reset_index().values.T
-                ax = axes[j][i]
-                ax.errorbar(
-                    dim, mean, sem,
-                    label=f"zeroshot N{portfolio_ensemble_size} Metalearning",
-                    linestyle="",
-                    marker="o",
-                )
-
+            dim, mean, sem = df_portfolio_metalearning.loc[:, [dimension, metric]].groupby(dimension).agg(
+                ["mean", "sem"]).reset_index().values.T
+            ax = axes[j]
+            ax.errorbar(
+                dim, mean, sem,
+                label=f"zeroshot Metalearning",
+                linestyle="",
+                marker="o",
+            )
+            # ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
             ax.set_xlim([0, None])
+            ax.set_xticks(np.unique(dim))
             if j == 1:
                 ax.set_xlabel(legend)
             if i == 0:
@@ -302,12 +303,10 @@ def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, sh
                 legend_obj = ax.legend()
                 for text in legend_obj.get_texts():
                     text.set_fontsize(8)
-            # axes[i][j].set_title("100 configs per framework, time_limit=600")
-    # fig_save_path = figure_path() / f"sensitivity.pdf"
+
     fig.suptitle(f"{exp_name}, {title}")
     plt.tight_layout()
     plt.savefig(str(Paths.data_root / "results-baseline-comparison" / exp_name / save_name / f"sensitivity.png"))
-    # plt.savefig(fig_save_path)
     if show:
         plt.show()
 
@@ -421,7 +420,7 @@ if __name__ == "__main__":
 
     n_eval_folds = args.n_folds
     # n_portfolios = [5, 10, 50, 100, n_portfolios_default]
-    n_portfolios = [2, 3, 4, 5, 10, 20]
+    n_portfolios = [2, 3, 4, 5, 10]
     max_runtimes = [300, 600, 1800, 3600, 3600 * 4, 24 * 3600]
     # n_training_datasets = list(range(10, 210, 10))
     # n_training_configs = list(range(10, 210, 10))

@@ -8,7 +8,7 @@ from tabrepo.loaders import Paths
 import os
 
 
-def visualize_config_selected(exp_name, title, save_name, top_n_configs=10):
+def visualize_config_selected(exp_name, title, save_name, top_n_configs=10, portfolio_size_to_plot=4):
 
     print(os.getcwd())
     df = pd.read_csv(f'../../data/simulation/{exp_name}/results.csv')
@@ -16,7 +16,7 @@ def visualize_config_selected(exp_name, title, save_name, top_n_configs=10):
     # Define method names
     # method1 = 'Portfolio-N200 metalearning (ensemble) (4h)'
     # method2 = 'Portfolio-N200 (ensemble) (4h)'
-    method_base_name = df['method'].str.extract(r'(Portfolio-N2)').dropna()[0].unique()[0]
+    method_base_name = df['method'].str.extract(fr'(Portfolio-N{portfolio_size_to_plot})').dropna()[0].unique()[0]
     method1 = f'{method_base_name} metalearning (ensemble)'
     method2 = f'{method_base_name} (ensemble) (4h)'
 
