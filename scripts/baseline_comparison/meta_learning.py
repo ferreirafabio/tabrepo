@@ -10,10 +10,12 @@ import numpy as np
 from dataclasses import dataclass
 import random
 from scripts.baseline_comparison.meta_learning_utils import (
-    minmax_normalize_tasks, print_arguments,
+    minmax_normalize_tasks,
+    print_arguments,
     convert_df_ranges_dtypes_fillna,
     get_test_dataset_folds,
     get_train_val_split,
+    transform_ranks,
 )
 from tabrepo.portfolio.portfolio_generator import RandomPortfolioGenerator, AbstractPortfolioGenerator
 
@@ -65,8 +67,7 @@ def zeroshot_results_metalearning(
         use_extended_meta_features: bool = False,
         use_synthetic_portfolios: bool = False,
         n_synthetic_portfolios: int = 1000,
-        portfolio_size: int = 2,
-        use_metalearning_kfold_training: bool = True,
+        use_metalearning_kfold_training: bool = False,
         n_splits_kfold: int = 5,
         generate_feature_importance: bool = False,
         seed: int = 0,
@@ -89,9 +90,12 @@ def zeroshot_results_metalearning(
     """
     print_arguments(**locals())
 
-    def evaluate_dataset(test_datasets, n_portfolio, n_ensemble, n_training_dataset, n_training_fold, n_training_config,
-                         max_runtime, repo: EvaluationRepository, df_rank, rank_scorer, normalized_scorer,
-                         model_frameworks, use_meta_features, seed):
+    def evaluate_dataset(test_datasets, n_portfolio_model_frameworks_df_rank, n_ensemble, n_training_dataset, n_training_fold, n_training_config,
+                         max_runtime, repo: EvaluationRepository, rank_scorer, normalized_scorer,
+                         use_meta_features, seed):
+
+        df_rank, model_frameworks, n_portfolio = n_portfolio_model_frameworks_df_rank
+
         method_name = zeroshot_name(
             n_portfolio=n_portfolio,
             n_ensemble=n_ensemble,
@@ -101,6 +105,7 @@ def zeroshot_results_metalearning(
             n_training_config=n_training_config,
             name_suffix=" metalearning",
         )
+
         _n_training_dataset = n_training_dataset
         # restrict number of evaluation fold
         if n_training_fold is None:
@@ -283,7 +288,7 @@ def zeroshot_results_metalearning(
                 # the portfolio size is in this case defined by the synthetic_portfolio_size
                 framework_name = ranks_per_ds.iloc[0]["framework"]
                 if framework_name.startswith("Portfolio"):
-                    portfolio_configs_per_ds = repo.random_portfolio_generator.generated_portfolios[framework_name]
+                    portfolio_configs_per_ds = repo.random_portfolio_generator.portfolio_name_to_config[n_portfolio][framework_name]
                 else:
                     portfolio_configs_per_ds = [framework_name]
             else:
@@ -333,60 +338,67 @@ def zeroshot_results_metalearning(
     # TODO use normalized scores
     # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
 
-    # instead of metric_error, let's use the actual task here; also rank them in ascending order
-    assert loss in ["metric_error", "metric_error_val", "rank"]
-    random_portfolio_generator = None
-    if use_synthetic_portfolios:
-        # TODO: implement saving / loading portfolio generator object along with updated dd csv
-        assert loss == "metric_error", "synthetic portfolios currently only supported for metric_error loss"
-        generator_file_path = results_dir / f"random_portfolio_generator_{n_synthetic_portfolios}_{portfolio_size}.pkl"
-
-        if os.path.exists(generator_file_path):
-            random_portfolio_generator = AbstractPortfolioGenerator.load_generator(generator_file_path)
-            metric_errors = random_portfolio_generator.metric_errors
-            ensemble_weights = random_portfolio_generator.ensemble_weights
-            portfolio_name = random_portfolio_generator.portfolio_name
-            print(f"Loaded random portfolio generator: {generator_file_path}.")
-        else:
-            print(f"No previous random portfolio generator found for settings {n_synthetic_portfolios=} and {portfolio_size=}. Generating anew.")
-            random_portfolio_generator = RandomPortfolioGenerator(repo=repo)
-            metric_errors, ensemble_weights, portfolio_name = random_portfolio_generator.generate_evaluate_bulk(n_portfolios=n_synthetic_portfolios, portfolio_size=portfolio_size, ensemble_size=100, seed=seed, backend="ray")
-            random_portfolio_generator.save_generator(generator_file_path)
-
-        dd = dd[[loss, "framework", "task"]]
-        # TODO: impute other columns like train time
-        dd = random_portfolio_generator.concatenate_bulk(real_errors=dd, synthetic_errors=metric_errors, portfolio_name=portfolio_name)
-        repo.random_portfolio_generator = random_portfolio_generator
-
-    if loss == "rank":
-        df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank(ascending=True)
-        print("using unnormalized rank as objective")
-    elif loss == "metric_error":
-        df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error")
-        df_rank = minmax_normalize_tasks(df_rank)
-        df_rank = df_rank.rank(ascending=True)
-        print("using task-normalized metric_error")
-    elif loss == "metric_error_val":
-        df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error_val")
-        df_rank = minmax_normalize_tasks(df_rank)
-        df_rank = df_rank.rank(ascending=True)
-        print("using task-normalized metric_error_val")
-    else:
-        import sys
-        print("loss not supported")
-        sys.exit()
-
-    # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
-    df_rank.fillna(value=np.nanmax(df_rank.values), inplace=True)
-    assert not any(df_rank.isna().values.reshape(-1))
-
-    model_frameworks = {
+    model_frameworks_original = {
         framework: sorted([x for x in repo.configs() if framework in x])
         for framework in framework_types
     }
-    if random_portfolio_generator and random_portfolio_generator.generated_portfolios:
-        model_frameworks = model_frameworks.copy()
-        model_frameworks["ensemble"] = list(random_portfolio_generator.generated_portfolios.keys())
+
+    dd = dd[[loss, "framework", "task"]]
+
+    # instead of metric_error, let's use the actual task here; also rank them in ascending order
+    assert loss in ["metric_error", "metric_error_val", "rank"]
+    random_portfolio_generator = None
+
+    # TODO: impute other columns like train time when generating metric_errors
+    if use_synthetic_portfolios:
+        assert loss == "metric_error", "synthetic portfolios currently only supported for metric_error loss"
+        df_rank_n_portfolios = []
+        model_frameworks_n_portfolios = []
+        generator_file_path = results_dir / f"random_portfolio_generator_{n_synthetic_portfolios}_{seed}.pkl"
+
+        if os.path.exists(generator_file_path):
+            random_portfolio_generator = AbstractPortfolioGenerator.load_generator(generator_file_path)
+            print(f"Loaded random portfolio generator: {generator_file_path}.")
+        else:
+            print(f"No previous random portfolio generator found for settings {n_synthetic_portfolios=} and {seed=}. Generating anew.")
+            random_portfolio_generator = RandomPortfolioGenerator(repo=repo, n_portfolios=n_portfolios)
+
+            metric_errors, ensemble_weights, portfolio_info = random_portfolio_generator.generate_evaluate_bulk(
+                n_portfolios=n_synthetic_portfolios,
+                portfolio_size=n_portfolios,
+                ensemble_size=100,
+                seed=seed,
+                backend="ray"
+            )
+
+            random_portfolio_generator.save_generator(generator_file_path)
+
+        repo.random_portfolio_generator = random_portfolio_generator
+        for i in n_portfolios:
+            m_e = random_portfolio_generator.metric_errors[i]
+            portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[i].keys())
+            dd_with_portfolio = dd.copy()
+            dd_with_portfolio = random_portfolio_generator.concatenate_bulk(real_errors=dd_with_portfolio,
+                                                             synthetic_errors=m_e,
+                                                             portfolio_names=portfolio_names)
+            df_r = transform_ranks(loss, dd_with_portfolio)
+            df_r.fillna(value=np.nanmax(df_r.values), inplace=True)
+            assert not any(df_r.isna().values.reshape(-1))
+            df_rank_n_portfolios.append(df_r)
+
+            model_frameworks_copy = model_frameworks_original.copy()
+            model_frameworks_copy["ensemble"] = portfolio_names
+            model_frameworks_n_portfolios.append(model_frameworks_copy)
+
+   # no synthetic portfolios
+    else:
+        df_rank_n_portfolios = transform_ranks(loss, dd)
+
+        # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
+        df_rank_n_portfolios.fillna(value=np.nanmax(df_rank_n_portfolios.values), inplace=True)
+        assert not any(df_rank_n_portfolios.isna().values.reshape(-1))
+        df_rank_n_portfolios = [df_rank_n_portfolios]
+        model_frameworks_n_portfolios = [model_frameworks_original]
 
     if use_metalearning_kfold_training:
         print(f"Using kfold training for metalearning")
@@ -396,10 +408,14 @@ def zeroshot_results_metalearning(
     else:
         dataset_names_input = [[ds] for ds in dataset_names]
 
+    assert len(model_frameworks_n_portfolios) == len(df_rank_n_portfolios) and len(n_portfolios) == len(df_rank_n_portfolios)
+
+    n_portfolio_model_frameworks_df_rank = list(zip(df_rank_n_portfolios, model_frameworks_n_portfolios, n_portfolios))
+
     result_list = parallel_for(
         evaluate_dataset,
         inputs=list(itertools.product(dataset_names_input,
-                                      n_portfolios,
+                                      n_portfolio_model_frameworks_df_rank,
                                       n_ensembles,
                                       n_training_datasets,
                                       n_training_folds,
@@ -407,10 +423,9 @@ def zeroshot_results_metalearning(
                                       max_runtimes,
                                       )),
         context=dict(repo=repo,
-                     df_rank=df_rank,
                      rank_scorer=rank_scorer,
                      normalized_scorer=normalized_scorer,
-                     model_frameworks=model_frameworks,
+                     # model_frameworks=model_frameworks,
                      use_meta_features=use_meta_features,
                      seed=seed,
                      ),

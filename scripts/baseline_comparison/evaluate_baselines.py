@@ -9,6 +9,7 @@ import matplotlib
 import sys
 from pathlib import Path
 import random
+from datetime import datetime
 
 from autogluon.common.savers import save_pd
 from dataclasses import dataclass
@@ -242,6 +243,75 @@ def generate_sensitivity_plots(df, exp_name, title, save_name, show: bool = Fals
         plt.show()
 
 
+def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, show: bool = False):
+    # show stds
+    fig, axes = plt.subplots(2, 1, sharex='col', sharey='row', figsize=(9, 4))
+
+    dimensions = [
+        # ("M", "Number of configuration per family"),
+        ("D", "Portfolio size to fit"),
+    ]
+    for i, (dimension, legend) in enumerate(dimensions):
+        for j, metric in enumerate(["normalized-error", "rank"]):
+            df_portfolio = df.loc[df.method.str.contains(f"Portfolio-N.*-{dimension}(?!.*metalearning).*4h"), :].copy()
+            df_ag = df.loc[df.method.str.contains("AutoGluon best \(4h\)"), metric].copy()
+            df_portfolio.loc[:, dimension] = df_portfolio.loc[:, "method"].apply(
+                lambda s: int(s.replace(" (ensemble) (4h)", "").split("-")[-1][1:]))
+            df_portfolio = df_portfolio[df_portfolio[dimension] > 1]
+
+            portfolio_ensemble_size = int(df_portfolio['method'].iloc[0].split('Portfolio-N')[1].split('-')[0])
+
+            dim, mean, sem = df_portfolio.loc[:, [dimension, metric]].groupby(dimension).agg(
+                ["mean", "sem"]).reset_index().values.T
+            ax = axes[j][i]
+            ax.errorbar(
+                dim, mean, sem,
+                label=f"zeroshot N{portfolio_ensemble_size}",
+                linestyle="",
+                marker="o",
+            )
+
+            if meta_learning:
+                df_portfolio_metalearning = df.loc[
+                                            df.method.str.contains(f"Portfolio-N.*-{dimension}.*metalearning.*4h"),
+                                            :].copy()
+                df_portfolio_metalearning.loc[:, dimension] = df_portfolio_metalearning.loc[:, "method"].apply(
+                    lambda s: int(s.replace("metalearning (ensemble) (4h)", "").split("-")[-1][1:]))
+                df_portfolio_metalearning = df_portfolio_metalearning[df_portfolio_metalearning[dimension] > 1]
+
+                portfolio_ensemble_size = int(df_portfolio_metalearning['method'].iloc[0].split('Portfolio-N')[1].split('-')[0])
+
+                dim, mean, sem = df_portfolio_metalearning.loc[:, [dimension, metric]].groupby(dimension).agg(
+                    ["mean", "sem"]).reset_index().values.T
+                ax = axes[j][i]
+                ax.errorbar(
+                    dim, mean, sem,
+                    label=f"zeroshot N{portfolio_ensemble_size} Metalearning",
+                    linestyle="",
+                    marker="o",
+                )
+
+            ax.set_xlim([0, None])
+            if j == 1:
+                ax.set_xlabel(legend)
+            if i == 0:
+                ax.set_ylabel(f"{metric}")
+            ax.grid()
+            ax.hlines(df_ag.mean(), xmin=0, xmax=max(dim), color="black", label="AutoGluon", ls="--")
+            if i == 0 and j == 0:
+                legend_obj = ax.legend()
+                for text in legend_obj.get_texts():
+                    text.set_fontsize(8)
+            # axes[i][j].set_title("100 configs per framework, time_limit=600")
+    # fig_save_path = figure_path() / f"sensitivity.pdf"
+    fig.suptitle(f"{exp_name}, {title}")
+    plt.tight_layout()
+    plt.savefig(str(Paths.data_root / "results-baseline-comparison" / exp_name / save_name / f"sensitivity.png"))
+    # plt.savefig(fig_save_path)
+    if show:
+        plt.show()
+
+
 def save_total_runtime_to_file(total_time_h):
     # Save total runtime so that "show_repository_stats.py" can show the ratio of saved time
     with open(output_path / "tables" / "runtime.txt", "w") as f:
@@ -252,7 +322,7 @@ def save_total_runtime_to_file(total_time_h):
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416")
+    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416_30")
     parser.add_argument("--n_folds", type=int, default=-1, required=False,
                         help="Number of folds to consider when evaluating all baselines. Uses all if set to -1.")
     parser.add_argument("--n_datasets", type=int, required=False, help="Number of datasets to consider when evaluating all baselines.")
@@ -272,10 +342,11 @@ if __name__ == "__main__":
                         help="indicates whether we should add synthetic portfolios to the metalearning train data")
     parser.add_argument("--n_synthetic_portfolios", type=int, default=1000, required=False,
                         help="Number of synthetic portfolios used")
-    parser.add_argument("--portfolio_size", type=int, default=1, required=False,
-                        help="Size of synthetic portfolios used")
 
-    parser.add_argument("--deactivate_metalearning_kfold_training", action="store_true",
+    # parser.add_argument("--portfolio_size", type=int, default=1, required=False,
+    #                     help="Size of synthetic portfolios used")
+
+    parser.add_argument("--use_metalearning_kfold_training", action="store_true",
                         help="indicates whether we should turn off using kfold training (default: 5 splits) as opposed to leave-one-dataset training. Using this flag increases training and evaluation time.")
     parser.add_argument("--n_splits_kfold", type=int, default=5, required=False,
                         help="Number of splits for kfold metalearning training to consider")
@@ -316,11 +387,10 @@ if __name__ == "__main__":
     loss = args.loss
     n_configs_per_framework = args.n_configs_per_framework
     use_synthetic_portfolios = args.use_synthetic_portfolios
-    use_metalearning_kfold_training = not args.deactivate_metalearning_kfold_training
+    use_metalearning_kfold_training = args.use_metalearning_kfold_training
     generate_feature_importance = args.generate_feature_importance
     n_splits_kfold = args.n_splits_kfold
     n_synthetic_portfolios = args.n_synthetic_portfolios
-    portfolio_size = args.portfolio_size
 
     use_extended_mf = False
     if (args.extended_mf_general or
@@ -350,7 +420,8 @@ if __name__ == "__main__":
             ray.init(num_cpus=num_ray_processes)
 
     n_eval_folds = args.n_folds
-    n_portfolios = [5, 10, 50, 100, n_portfolios_default]
+    # n_portfolios = [5, 10, 50, 100, n_portfolios_default]
+    n_portfolios = [2, 3, 4, 5, 10, 20]
     max_runtimes = [300, 600, 1800, 3600, 3600 * 4, 24 * 3600]
     # n_training_datasets = list(range(10, 210, 10))
     # n_training_configs = list(range(10, 210, 10))
@@ -358,7 +429,7 @@ if __name__ == "__main__":
     n_training_datasets = [5, 10, 25, 50, 75, 100, 125, 150, 175, 199]
     # n_training_configs = [1, 5, 10, 25, 50, 75, 100, 125, 150, 175, 200]
     n_training_configs = [1, 5, 10, 25, 50, 75, 100, 125, 150, 175, 200]
-    n_seeds = 10
+    n_seeds = 2
     n_training_folds = [1, 2, 5, 10]
     n_ensembles = [10, 20, 40, 80]
     linestyle_ensemble = "--"
@@ -384,16 +455,17 @@ if __name__ == "__main__":
     seed_str = f"{n_seeds}-seeds"
 
     exp_title = f"{training_type_str}, {meta_feature_str}, {seed_str}"
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
     if use_synthetic_portfolios:
-        synthetic_portfolios_str = f"synthetic_portfolios_{n_synthetic_portfolios}_{portfolio_size}"
+        synthetic_portfolios_str = f"synthetic_portfolios_{n_synthetic_portfolios}"
         exp_title += f", {synthetic_portfolios_str}"
         
     exp_title_save_name = exp_title.replace(' ', '_').replace(',', '')
+    exp_title_save_name += f"_{current_time}"
 
     save_dir = Paths.data_root / "results-baseline-comparison" / args.repo / exp_title_save_name
-    exist_ok = False if ignore_cache else True
     results_dir = Paths.data_root / "results-baseline-comparison"
-    os.makedirs(save_dir, exist_ok=exist_ok)
+    os.makedirs(save_dir)
 
     args_dict = vars(args)
     with open(save_dir / "args.json", 'w') as args_file:
@@ -434,7 +506,6 @@ if __name__ == "__main__":
         use_extended_meta_features=use_extended_mf,
         loss=loss,
         use_synthetic_portfolios=use_synthetic_portfolios,
-        portfolio_size=portfolio_size,
         n_synthetic_portfolios=n_synthetic_portfolios,
         use_metalearning_kfold_training=use_metalearning_kfold_training,
         generate_feature_importance=generate_feature_importance,
@@ -467,24 +538,26 @@ if __name__ == "__main__":
         #     expname=expname, name=f"zeroshot-{expname}",
         #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs)
         # ),
-        Experiment(
-            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
-            run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
-                                                          n_portfolios=[portfolio_size],
-                                                          name=f"zeroshot-metalearning-singlebest-{expname}",
-                                                          expname=expname,
-                                                          max_runtimes=[None],
-                                                          )
-        ),
-        Experiment(
-            expname=expname, name=f"zeroshot-singlebest-{expname}",
-            run_fun=lambda: zeroshot_results(**experiment_common_kwargs, n_portfolios=[portfolio_size])
-        ),
-        # Automl baselines such as Autogluon best, high, medium quality
-        Experiment(
-            expname=expname, name=f"automl-baselines-{expname}",
-            run_fun=lambda: automl_results(**experiment_common_kwargs),
-        ),
+        # Experiment(
+        #     expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}",
+        #     run_fun=lambda: zeroshot_results_metalearning(**experiment_common_kwargs,
+        #                                                   # n_portfolios=[portfolio_size],
+        #                                                   name=f"zeroshot-metalearning-singlebest-{expname}",
+        #                                                   expname=expname,
+        #                                                   max_runtimes=[None],
+        #                                                   )
+        # ),
+        # Experiment(
+        #     expname=expname, name=f"zeroshot-singlebest-{expname}",
+        #     run_fun=lambda: zeroshot_results(**experiment_common_kwargs,
+        #                                      # n_portfolios=[portfolio_size]
+        #                                      )
+        # ),
+        # # Automl baselines such as Autogluon best, high, medium quality
+        # Experiment(
+        #     expname=expname, name=f"automl-baselines-{expname}",
+        #     run_fun=lambda: automl_results(**experiment_common_kwargs),
+        # ),
         # Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-maxruntimes",
         #     run_fun=lambda: zeroshot_results(max_runtimes=max_runtimes, **experiment_common_kwargs)
@@ -512,48 +585,75 @@ if __name__ == "__main__":
         #     run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets, seed=seed, **experiment_common_kwargs)
         # ))
 
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-singlebest-{expname}-num-configs-{seed}",
-            run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs,
-                                             n_portfolios=[portfolio_size],
-                                             seed=seed,
-                                             **experiment_common_kwargs,
-                                             )
-        ))
-
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-singlebest-{expname}-num-training-datasets-{seed}",
-            run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets,
-                                             n_portfolios=[portfolio_size],
-                                             seed=seed,
-                                             **experiment_common_kwargs,
-                                             )
-        ))
-
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-configs-{seed}",
-            run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[portfolio_size],
-                                                          n_training_configs=n_training_configs,
-                                                          name=f"zeroshot-metalearning-singlebest-{expname}",
-                                                          expname=expname,
-                                                          seed=seed,
-                                                          **experiment_common_kwargs,
-                                                          )
-        ))
+        # experiments.append(Experiment(
+        #     expname=expname, name=f"zeroshot-singlebest-{expname}-num-configs-{seed}",
+        #     run_fun=lambda: zeroshot_results(n_training_configs=n_training_configs,
+        #                                      # n_portfolios=[portfolio_size],
+        #                                      seed=seed,
+        #                                      **experiment_common_kwargs,
+        #                                      )
+        # ))
+        #
+        # experiments.append(Experiment(
+        #     expname=expname, name=f"zeroshot-singlebest-{expname}-num-training-datasets-{seed}",
+        #     run_fun=lambda: zeroshot_results(n_training_datasets=n_training_datasets,
+        #                                      # n_portfolios=[portfolio_size],
+        #                                      seed=seed,
+        #                                      **experiment_common_kwargs,
+        #                                      )
+        # ))
+        #
+        # experiments.append(Experiment(
+        #     expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-configs-{seed}",
+        #     run_fun=lambda: zeroshot_results_metalearning(
+        #         # n_portfolios=[portfolio_size],
+        #         n_training_configs=n_training_configs,
+        #         name=f"zeroshot-metalearning-singlebest-{expname}",
+        #         expname=expname,
+        #         seed=seed,
+        #         **experiment_common_kwargs,
+        #       )
+        # ))
+        #
+        # experiments.append(
+        #     Experiment(
+        #         expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-training-datasets-{seed}",
+        #         run_fun=lambda: zeroshot_results_metalearning(
+        #                      # n_portfolios=[portfolio_size],
+        #                       n_training_datasets=n_training_datasets,
+        #                       name=f"zeroshot-metalearning-singlebest-{expname}",
+        #                       expname=expname,
+        #                       seed=seed,
+        #                       **experiment_common_kwargs,
+        #                       )
+        #     ),
 
         experiments.append(
             Experiment(
-                expname=expname, name=f"zeroshot-metalearning-singlebest-{expname}-num-training-datasets-{seed}",
-                run_fun=lambda: zeroshot_results_metalearning(n_portfolios=[portfolio_size],
-                                                              n_training_datasets=n_training_datasets,
-                                                              name=f"zeroshot-metalearning-singlebest-{expname}",
-                                                              expname=expname,
-                                                              seed=seed,
-                                                              **experiment_common_kwargs,
-                                                              )
+                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-{seed}",
+                run_fun=lambda: zeroshot_results_metalearning(
+                              n_portfolios=n_portfolios,
+                              name=f"zeroshot-metalearning-synthetic-portfolios-{expname}",
+                              expname=expname,
+                              max_runtimes=[None],
+                              seed=seed,
+                              **experiment_common_kwargs,
+                              )
             ),
 
         )
+        experiments.append(
+            Experiment(
+                expname=expname, name=f"zeroshot-{expname}-num-portfolios-{seed}",
+                run_fun=lambda: zeroshot_results(
+                    n_portfolios=n_portfolios,
+                    seed=seed,
+                    **experiment_common_kwargs,
+                )
+            ),
+        )
+
+
 
     with catchtime("total time to generate evaluations"):
         df = pd.concat([
@@ -574,7 +674,8 @@ if __name__ == "__main__":
     print(f"Total time of experiments: {total_time_h} hours")
     save_total_runtime_to_file(total_time_h)
 
-    generate_sensitivity_plots(df, exp_name=args.repo, title=exp_title, save_name=exp_title_save_name, show=True, meta_learning=True)
+    # generate_sensitivity_plots(df, exp_name=args.repo, title=exp_title, save_name=exp_title_save_name, show=True, meta_learning=True)
+    generate_sensitivity_plots_num_portfolios(df, exp_name=args.repo, title=exp_title, save_name=exp_title_save_name, show=True)
 
     visualize_config_selected(exp_name=args.repo, title=exp_title, save_name=exp_title_save_name)
 

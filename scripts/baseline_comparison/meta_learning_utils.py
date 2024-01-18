@@ -31,6 +31,28 @@ def get_train_val_split(df: pd.DataFrame, hold_out_perc: float = 0.1, seed: int 
     return train_df, val_df
 
 
+def transform_ranks(loss, dd):
+    if loss == "rank":
+        df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank(ascending=True)
+        print("using unnormalized rank as objective")
+    elif loss == "metric_error":
+        df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error")
+        df_rank = minmax_normalize_tasks(df_rank)
+        df_rank = df_rank.rank(ascending=True)
+        print("using task-normalized metric_error")
+    elif loss == "metric_error_val":
+        df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error_val")
+        df_rank = minmax_normalize_tasks(df_rank)
+        df_rank = df_rank.rank(ascending=True)
+        print("using task-normalized metric_error_val")
+    else:
+        import sys
+        print("loss not supported")
+        sys.exit()
+
+    return df_rank
+
+
 def minmax_normalize_tasks(df):
     tasks = list(df.columns.str.split('_').str[0].unique())
     # Create a new dataframe to store normalized values
