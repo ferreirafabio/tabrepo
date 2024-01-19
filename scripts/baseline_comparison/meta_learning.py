@@ -108,6 +108,7 @@ def zeroshot_results_metalearning(
             max_runtime=max_runtime,
             n_training_config=n_training_config,
             name_suffix=" metalearning",
+            seed=seed,
         )
 
         _n_training_dataset = n_training_dataset
@@ -326,6 +327,10 @@ def zeroshot_results_metalearning(
                 method=method_name,
                 folds=range(n_eval_folds),
             )
+            if use_synthetic_portfolios and framework_name.startswith("Portfolio") and use_synthetic_portfolios:
+                for res in evaluate_configs_result:
+                    res.config_selected = [framework_name]
+
             all_config_results_per_ds[test_ds] = evaluate_configs_result
 
         shutil.rmtree(predictor.path)

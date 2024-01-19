@@ -325,6 +325,7 @@ def zeroshot_name(
         n_training_fold: int = None, n_training_config: int = None,
         max_runtime: float = default_runtime,
         name_suffix: str = "",
+        seed: int = 0,
 ):
     """
     :return: name of the zeroshot method such as Zeroshot-N20-C40 if n_training_dataset or n_training_folds are not
@@ -334,7 +335,7 @@ def zeroshot_name(
     suffix = [
         f"-{letter}{x}" if x is not None else ""
         for letter, x in
-        [("N", n_portfolio), ("D", n_training_dataset), ("S", n_training_fold), ("M", n_training_config)]
+        [("N", n_portfolio), ("D", n_training_dataset), ("S", n_training_fold), ("M", n_training_config), ("S", seed)]
     ]
     suffix += name_suffix
 
@@ -408,7 +409,8 @@ def zeroshot_results(
             n_training_dataset=n_training_dataset,
             n_training_fold=n_training_fold,
             max_runtime=max_runtime,
-            n_training_config=n_training_config
+            n_training_config=n_training_config,
+            seed=seed,
         )
 
         # restrict number of evaluation fold
