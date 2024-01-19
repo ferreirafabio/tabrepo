@@ -18,7 +18,7 @@ from scripts.baseline_comparison.meta_learning_utils import (
     get_train_val_split,
     transform_ranks,
 )
-from tabrepo.portfolio.portfolio_generator import RandomPortfolioGenerator, ZeroShotPortfolioGenerator, AbstractPortfolioGenerator
+from tabrepo.portfolio.portfolio_generator import RandomPortfolioGenerator, AbstractPortfolioGenerator
 
 from sklearn.metrics import mean_squared_error
 from tabrepo.repository import EvaluationRepository
@@ -351,9 +351,9 @@ def zeroshot_results_metalearning(
     }
 
     dd = dd[[loss, "framework", "task"]]
+    assert loss == "metric_error", "currently only metric_error supported"
 
     # instead of metric_error, let's use the actual task here; also rank them in ascending order
-    assert loss in ["metric_error", "metric_error_val", "rank"]
     random_portfolio_generator = None
 
     # TODO: impute other columns like train time when generating metric_errors
@@ -380,12 +380,7 @@ def zeroshot_results_metalearning(
             )
 
             random_portfolio_generator.save_generator(generator_file_path)
-
-        if add_zeroshot_portfolios:
-            zeroshot_generator = ZeroShotPortfolioGenerator(repo, n_portfolios=n_portfolios)
-            repo.zeroshot_generator = zeroshot_generator
-
-        repo.random_portfolio_generator = random_portfolio_generator
+            repo.random_portfolio_generator = random_portfolio_generator
 
         for i in n_portfolios:
             m_e = random_portfolio_generator.metric_errors[i]
@@ -395,14 +390,21 @@ def zeroshot_results_metalearning(
                                                              synthetic_errors=m_e,
                                                              portfolio_names=portfolio_names)
 
-            df_r = transform_ranks(loss, dd_with_portfolio)
+            df_r = dd_with_portfolio.pivot_table(index="framework", columns="task", values="metric_error")
+
+            if add_zeroshot_portfolios:
+                df_r = random_portfolio_generator.add_zeroshot(n_portfolio=i, df_rank=df_r)
+                portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[i].keys())
+
+            df_r = minmax_normalize_tasks(df_r)
+            df_r = df_r.rank(ascending=True)
+
             df_r.fillna(value=np.nanmax(df_r.values), inplace=True)
             assert not any(df_r.isna().values.reshape(-1))
-            if zeroshot_generator and add_zeroshot_portfolios:
-                df_r = zeroshot_generator.generate_evaluate(n_portfolio=i, df_rank=df_r)
-                portfolio_names += list(zeroshot_generator.portfolio_name_to_config[i].keys())
 
             df_rank_n_portfolios.append(df_r)
+
+
 
             model_frameworks_copy = model_frameworks_original.copy()
             model_frameworks_copy["ensemble"] = portfolio_names

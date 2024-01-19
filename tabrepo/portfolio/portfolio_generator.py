@@ -45,6 +45,31 @@ class AbstractPortfolioGenerator:
         suffix = "".join(suffix)
         return f"Portfolio{suffix}"
 
+    @staticmethod
+    def zeroshot_name(
+            n_portfolio: int, ensemble_size: int = None, n_training_dataset: int = None,
+            n_training_fold: int = None, n_training_config: int = None,
+            name_suffix: str = "",
+    ):
+        """
+        :return: name of the zeroshot method such as Zeroshot-N20-C40 if n_training_dataset or n_training_folds are not
+        None, suffixes "-D{n_training_dataset}" and "-S{n_training_folds}" are added, for instance "Zeroshot-N20-C40-D30-S5"
+        would be the name if n_training_dataset=30 and n_training_fold=5
+        """
+        suffix = [
+            f"-{letter}{x}" if x is not None else ""
+            for letter, x in
+            [("N", n_portfolio), ("ES", ensemble_size)]
+        ]
+        suffix += name_suffix
+
+        # if n_ensemble:
+        #     suffix += f"-C{n_ensemble}"
+        suffix = "".join(suffix)
+        if ensemble_size is None or ensemble_size > 1:
+            suffix += " (ensemble)"
+        return f"Portfolio-ZS{suffix}"
+
     def concatenate(self, real_errors: pd.DataFrame, synthetic_errors: pd.Series, portfolio_name: str) -> pd.DataFrame:
         metric_errors_prepared = self._prepare_merge(metric_errors=synthetic_errors, portfolio_name=portfolio_name)
         return pd.concat([real_errors, metric_errors_prepared], axis=0, ignore_index=True)
@@ -117,38 +142,7 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
 
         return self.metric_errors, self.ensemble_weights, self.portfolio_name_to_config
 
-
-class ZeroShotPortfolioGenerator(AbstractPortfolioGenerator):
-    def __init__(self, repo: EvaluationRepository, n_portfolios: List[int]):
-        super().__init__(repo=repo)
-        self.portfolio_name_to_config = {portfolio_size: {} for portfolio_size in n_portfolios}
-
-    @staticmethod
-    def zeroshot_name(
-            n_portfolio: int, ensemble_size: int = None, n_training_dataset: int = None,
-            n_training_fold: int = None, n_training_config: int = None,
-            name_suffix: str = "",
-    ):
-        """
-        :return: name of the zeroshot method such as Zeroshot-N20-C40 if n_training_dataset or n_training_folds are not
-        None, suffixes "-D{n_training_dataset}" and "-S{n_training_folds}" are added, for instance "Zeroshot-N20-C40-D30-S5"
-        would be the name if n_training_dataset=30 and n_training_fold=5
-        """
-        suffix = [
-            f"-{letter}{x}" if x is not None else ""
-            for letter, x in
-            [("N", n_portfolio),  ("ES", ensemble_size)]
-        ]
-        suffix += name_suffix
-
-        # if n_ensemble:
-        #     suffix += f"-C{n_ensemble}"
-        suffix = "".join(suffix)
-        if ensemble_size is None or ensemble_size > 1:
-            suffix += " (ensemble)"
-        return f"ZS{suffix}"
-
-    def generate_evaluate(self, n_portfolio: int, df_rank: pd.DataFrame, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, backend: str = "ray") -> pd.DataFrame:
+    def add_zeroshot(self, n_portfolio: int, df_rank: pd.DataFrame, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, backend: str = "ray") -> pd.DataFrame:
         if datasets is None:
             datasets = self.repo.datasets()
 
@@ -195,10 +189,18 @@ class ZeroShotPortfolioGenerator(AbstractPortfolioGenerator):
         zeroshot_config_name = self.zeroshot_name(n_portfolio=n_portfolio, ensemble_size=ensemble_size)
         metric_errors_prepared = self._prepare_merge(metric_errors, zeroshot_config_name)
         metric_errors_prepared = metric_errors_prepared.pivot_table(index="framework", columns="task", values="metric_error")
-        self.portfolio_name_to_config[n_portfolio][zeroshot_config_name] = list(ensemble_weights.columns)
+        self.portfolio_name_to_config[n_portfolio][zeroshot_config_name] = portfolio_configs
 
 
         return pd.concat([df_rank, metric_errors_prepared], axis=0)
+
+
+# class ZeroShotPortfolioGenerator(AbstractPortfolioGenerator):
+#     def __init__(self, repo: EvaluationRepository, n_portfolios: List[int]):
+#         super().__init__(repo=repo)
+#         self.portfolio_name_to_config = {portfolio_size: {} for portfolio_size in n_portfolios}
+
+
 
 # class BestPortfolioGenerator(AbstractPortfolioGenerator):
 #     def __init__(self, repo: EvaluationRepository):
