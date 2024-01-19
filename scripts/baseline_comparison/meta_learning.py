@@ -293,9 +293,6 @@ def zeroshot_results_metalearning(
                 framework_name = ranks_per_ds.iloc[0]["framework"]
                 if framework_name.startswith("Portfolio"):
                     portfolio_configs_per_ds = repo.random_portfolio_generator.portfolio_name_to_config[n_portfolio][framework_name]
-                elif framework_name.startswith("ZS"):
-                    portfolio_configs_per_ds = repo.zeroshot_generator.portfolio_name_to_config[n_portfolio][
-                        framework_name]
                 else:
                     portfolio_configs_per_ds = [framework_name]
             else:
@@ -350,9 +347,9 @@ def zeroshot_results_metalearning(
         for framework in framework_types
     }
 
-    dd = dd[[loss, "framework", "task"]]
-    assert loss == "metric_error", "currently only metric_error supported"
+    assert loss in ["metric_error", "metric_error_val", "rank"]
 
+    dd = dd[[loss, "framework", "task"]]
     # instead of metric_error, let's use the actual task here; also rank them in ascending order
     random_portfolio_generator = None
 
@@ -380,7 +377,8 @@ def zeroshot_results_metalearning(
             )
 
             random_portfolio_generator.save_generator(generator_file_path)
-            repo.random_portfolio_generator = random_portfolio_generator
+
+        repo.random_portfolio_generator = random_portfolio_generator
 
         for i in n_portfolios:
             m_e = random_portfolio_generator.metric_errors[i]
@@ -390,21 +388,14 @@ def zeroshot_results_metalearning(
                                                              synthetic_errors=m_e,
                                                              portfolio_names=portfolio_names)
 
-            df_r = dd_with_portfolio.pivot_table(index="framework", columns="task", values="metric_error")
-
             if add_zeroshot_portfolios:
-                df_r = random_portfolio_generator.add_zeroshot(n_portfolio=i, df_rank=df_r)
+                dd_with_portfolio = random_portfolio_generator.add_zeroshot(n_portfolio=i, dd=dd_with_portfolio, loss=loss)
                 portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[i].keys())
 
-            df_r = minmax_normalize_tasks(df_r)
-            df_r = df_r.rank(ascending=True)
-
+            df_r = transform_ranks(loss, dd_with_portfolio)
             df_r.fillna(value=np.nanmax(df_r.values), inplace=True)
             assert not any(df_r.isna().values.reshape(-1))
-
             df_rank_n_portfolios.append(df_r)
-
-
 
             model_frameworks_copy = model_frameworks_original.copy()
             model_frameworks_copy["ensemble"] = portfolio_names

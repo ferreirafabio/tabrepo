@@ -8,6 +8,8 @@ import numpy as np
 import pickle
 import os
 from tabrepo.portfolio.zeroshot_selection import zeroshot_configs
+from scripts.baseline_comparison.meta_learning_utils import transform_ranks
+from copy import deepcopy
 
 
 class AbstractPortfolioGenerator:
@@ -142,7 +144,7 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
 
         return self.metric_errors, self.ensemble_weights, self.portfolio_name_to_config
 
-    def add_zeroshot(self, n_portfolio: int, df_rank: pd.DataFrame, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, backend: str = "ray") -> pd.DataFrame:
+    def add_zeroshot(self, n_portfolio: int, dd: pd.DataFrame, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, loss: str = "metric_error", backend: str = "ray") -> pd.DataFrame:
         if datasets is None:
             datasets = self.repo.datasets()
 
@@ -173,6 +175,8 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
             #     )
             # )
 
+        df_rank = transform_ranks(loss, deepcopy(dd))
+
         indices = zeroshot_configs(-df_rank.values.T, n_portfolio)
         portfolio_configs = [df_rank.index[i] for i in indices]
 
@@ -188,11 +192,9 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
         # zeroshot_config_name = f"ZS-{str(list(ensemble_weights.columns))}"
         zeroshot_config_name = self.zeroshot_name(n_portfolio=n_portfolio, ensemble_size=ensemble_size)
         metric_errors_prepared = self._prepare_merge(metric_errors, zeroshot_config_name)
-        metric_errors_prepared = metric_errors_prepared.pivot_table(index="framework", columns="task", values="metric_error")
         self.portfolio_name_to_config[n_portfolio][zeroshot_config_name] = portfolio_configs
 
-
-        return pd.concat([df_rank, metric_errors_prepared], axis=0)
+        return pd.concat([dd, metric_errors_prepared], axis=0)
 
 
 # class ZeroShotPortfolioGenerator(AbstractPortfolioGenerator):

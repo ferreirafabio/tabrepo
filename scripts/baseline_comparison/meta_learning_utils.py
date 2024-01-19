@@ -32,10 +32,7 @@ def get_train_val_split(df: pd.DataFrame, hold_out_perc: float = 0.1, seed: int 
     return train_df, val_df
 
 
-
 def transform_ranks(loss, dd):
-    assert loss in ["metric_error", "metric_error_val", "rank"]
-
     if loss == "rank":
         df_rank = dd.pivot_table(index="framework", columns="task", values="rank").rank(ascending=True)
         print("using unnormalized rank as objective")
