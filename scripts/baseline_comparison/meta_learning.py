@@ -18,7 +18,7 @@ from scripts.baseline_comparison.meta_learning_utils import (
     get_train_val_split,
     transform_ranks,
 )
-from tabrepo.portfolio.portfolio_generator import RandomPortfolioGenerator, AbstractPortfolioGenerator
+from tabrepo.portfolio.portfolio_generator import RandomPortfolioGenerator, ZeroShotPortfolioGenerator, AbstractPortfolioGenerator
 
 from sklearn.metrics import mean_squared_error
 from tabrepo.repository import EvaluationRepository
@@ -74,7 +74,8 @@ def zeroshot_results_metalearning(
         seed: int = 0,
         save_name: int = "experiment",
         results_dir: str = "",
-        ray_process_ratio: float = 1.
+        ray_process_ratio: float = 1.,
+        add_zeroshot_portfolios: bool = False,
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -292,6 +293,9 @@ def zeroshot_results_metalearning(
                 framework_name = ranks_per_ds.iloc[0]["framework"]
                 if framework_name.startswith("Portfolio"):
                     portfolio_configs_per_ds = repo.random_portfolio_generator.portfolio_name_to_config[n_portfolio][framework_name]
+                elif framework_name.startswith("ZS"):
+                    portfolio_configs_per_ds = repo.zeroshot_generator.portfolio_name_to_config[n_portfolio][
+                        framework_name]
                 else:
                     portfolio_configs_per_ds = [framework_name]
             else:
@@ -356,12 +360,6 @@ def zeroshot_results_metalearning(
     if use_synthetic_portfolios:
         assert loss == "metric_error", "synthetic portfolios currently only supported for metric_error loss"
 
-        # num_cpus = os.cpu_count()
-        # num_ray_processes = math.ceil(num_cpus * 1.)
-
-        # import ray
-        # ray.init(num_cpus=num_ray_processes, ignore_reinit_error=True)
-
         df_rank_n_portfolios = []
         model_frameworks_n_portfolios = []
         generator_file_path = results_dir / f"random_portfolio_generator_repo_{expname}_num_portfolios_{n_synthetic_portfolios}_seed_{seed}.pkl"
@@ -383,7 +381,12 @@ def zeroshot_results_metalearning(
 
             random_portfolio_generator.save_generator(generator_file_path)
 
+        if add_zeroshot_portfolios:
+            zeroshot_generator = ZeroShotPortfolioGenerator(repo, n_portfolios=n_portfolios)
+            repo.zeroshot_generator = zeroshot_generator
+
         repo.random_portfolio_generator = random_portfolio_generator
+
         for i in n_portfolios:
             m_e = random_portfolio_generator.metric_errors[i]
             portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[i].keys())
@@ -391,17 +394,19 @@ def zeroshot_results_metalearning(
             dd_with_portfolio = random_portfolio_generator.concatenate_bulk(real_errors=dd_with_portfolio,
                                                              synthetic_errors=m_e,
                                                              portfolio_names=portfolio_names)
+
             df_r = transform_ranks(loss, dd_with_portfolio)
             df_r.fillna(value=np.nanmax(df_r.values), inplace=True)
             assert not any(df_r.isna().values.reshape(-1))
+            if zeroshot_generator and add_zeroshot_portfolios:
+                df_r = zeroshot_generator.generate_evaluate(n_portfolio=i, df_rank=df_r)
+                portfolio_names += list(zeroshot_generator.portfolio_name_to_config[i].keys())
+
             df_rank_n_portfolios.append(df_r)
 
             model_frameworks_copy = model_frameworks_original.copy()
             model_frameworks_copy["ensemble"] = portfolio_names
             model_frameworks_n_portfolios.append(model_frameworks_copy)
-
-        # num_ray_processes = math.ceil(num_cpus * ray_process_ratio)
-        # ray.init(num_cpus=num_ray_processes, ignore_reinit_error=True)
 
    # no synthetic portfolios
     else:

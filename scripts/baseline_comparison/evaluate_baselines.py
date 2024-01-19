@@ -325,7 +325,7 @@ def save_total_runtime_to_file(total_time_h):
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416")
+    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416_30")
     parser.add_argument("--n_folds", type=int, default=-1, required=False,
                         help="Number of folds to consider when evaluating all baselines. Uses all if set to -1.")
     parser.add_argument("--n_datasets", type=int, required=False, help="Number of datasets to consider when evaluating all baselines.")
@@ -454,12 +454,12 @@ if __name__ == "__main__":
     repo: EvaluationRepository = load_context(version=repo_version, ignore_cache=False, as_paper=as_paper)
     repo.print_info()
 
-    training_type_str = f"{n_splits_kfold}-fold-training" if use_metalearning_kfold_training else "LOO-training"
+    # training_type_str = f"{n_splits_kfold}-fold-training" if use_metalearning_kfold_training else "LOO-training"
     meta_feature_str = f"extended-meta-features" if use_extended_mf else "simple-meta-features"
     seed_str = f"{n_seeds}-seeds"
 
-
-    exp_title = f"{training_type_str}, {meta_feature_str}, {seed_str}"
+    exp_description = f"zeroshot metalearning with zeroshot portfolios"
+    exp_title = f"{exp_description}, {meta_feature_str}, {seed_str}"
     current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
     if use_synthetic_portfolios:
         synthetic_portfolios_str = f"synthetic_portfolios_{n_synthetic_portfolios}"
@@ -584,13 +584,14 @@ if __name__ == "__main__":
 
         experiments.append(
             Experiment(
-                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-{seed}",
+                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-with-zeroshot-portfolio-{seed}",
                 run_fun=lambda s=seed: zeroshot_results_metalearning(
                               n_portfolios=n_portfolios,
-                              name=f"zeroshot-metalearning-synthetic-portfolios-{expname}",
+                              name=f"zeroshot-metalearning-synthetic-portfolios-with-zeroshot-portfolio-{expname}",
                               expname=expname,
                               max_runtimes=[None],
                               seed=s,
+                              add_zeroshot_portfolios=True,
                               **experiment_common_kwargs,
                               )
             )
@@ -601,13 +602,12 @@ if __name__ == "__main__":
             run_fun=lambda s=seed: zeroshot_results(n_portfolios=n_portfolios, max_runtimes=[None], seed=s, **experiment_common_kwargs)
             ))
 
+        # Automl baselines such as Autogluon best, high, medium quality
+        experiments.append(Experiment(
+            expname=expname, name=f"automl-baselines-{expname}",
+            run_fun=lambda: automl_results(n_portfolios=n_portfolios, max_runtimes=[None], **experiment_common_kwargs),
+        ))
 
-
-        # # Automl baselines such as Autogluon best, high, medium quality
-        # experiments.append(Experiment(
-        #     expname=expname, name=f"automl-baselines-{expname}",
-        #     run_fun=lambda: automl_results(n_portfolios=n_portfolios, max_runtimes=[None], **experiment_common_kwargs),
-        # ))
 
         # experiments.append(Experiment(
         #     expname=expname, name=f"zeroshot-{expname}-num-configs-{seed}",
