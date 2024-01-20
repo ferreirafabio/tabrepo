@@ -423,7 +423,7 @@ if __name__ == "__main__":
     n_training_datasets = [5, 10, 25, 50, 75, 100, 125, 150, 175, 199]
     # n_training_configs = [1, 5, 10, 25, 50, 75, 100, 125, 150, 175, 200]
     n_training_configs = [1, 5, 10, 25, 50, 75, 100, 125, 150, 175, 200]
-    n_seeds = 2
+    n_seeds = 3
     n_training_folds = [1, 2, 5, 10]
     n_ensembles = [10, 20, 40, 80]
     linestyle_ensemble = "--"
@@ -448,8 +448,7 @@ if __name__ == "__main__":
     meta_feature_str = f"extended-meta-features" if use_extended_mf else "simple-meta-features"
     seed_str = f"{n_seeds}-seeds"
 
-    exp_description = f"zeroshot metalearning with zeroshot portfolios"
-    exp_title = f"{exp_description}, {meta_feature_str}, {seed_str}"
+    exp_title = f"{meta_feature_str}, {seed_str}"
     current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
     if use_synthetic_portfolios:
         synthetic_portfolios_str = f"synthetic_portfolios_{n_synthetic_portfolios}"
