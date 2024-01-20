@@ -6,6 +6,8 @@ import shutil
 import pandas as pd
 import math
 from typing import List, Optional, Tuple
+from tabrepo.utils.cache import cache_function, cache_function_dataframe
+
 
 import numpy as np
 from dataclasses import dataclass
@@ -76,6 +78,7 @@ def zeroshot_results_metalearning(
         results_dir: str = "",
         ray_process_ratio: float = 1.,
         add_zeroshot_portfolios: bool = False,
+        ignore_cache: bool = False,
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -108,7 +111,6 @@ def zeroshot_results_metalearning(
             max_runtime=max_runtime,
             n_training_config=n_training_config,
             name_suffix=" metalearning",
-            seed=seed,
         )
 
         _n_training_dataset = n_training_dataset
@@ -289,11 +291,14 @@ def zeroshot_results_metalearning(
         for test_ds in test_datasets:
             ranks_per_ds = all_predicted_ranks_all_datasets[all_predicted_ranks_all_datasets['dataset'] == test_ds]
             ranks_per_ds = ranks_per_ds.sort_values(by="rank", ascending=True)
+
+            portfolio_name = None
             if use_synthetic_portfolios:
                 # the portfolio size is in this case defined by the synthetic_portfolio_size
                 framework_name = ranks_per_ds.iloc[0]["framework"]
                 if framework_name.startswith("Portfolio"):
                     portfolio_configs_per_ds = repo.random_portfolio_generator.portfolio_name_to_config[n_portfolio][framework_name]
+                    portfolio_name = framework_name
                 else:
                     portfolio_configs_per_ds = [framework_name]
             else:
@@ -322,14 +327,13 @@ def zeroshot_results_metalearning(
                 rank_scorer=rank_scorer,
                 normalized_scorer=normalized_scorer,
                 config_selected=portfolio_configs_per_ds,
+                portfolio_name=portfolio_name,
                 ensemble_size=n_ensemble,
                 tid=repo.dataset_to_tid(test_ds),
                 method=method_name,
                 folds=range(n_eval_folds),
+                seed=seed,
             )
-            if use_synthetic_portfolios and framework_name.startswith("Portfolio") and use_synthetic_portfolios:
-                for res in evaluate_configs_result:
-                    res.config_selected = [framework_name]
 
             all_config_results_per_ds[test_ds] = evaluate_configs_result
 
@@ -376,7 +380,7 @@ def zeroshot_results_metalearning(
             metric_errors, ensemble_weights, portfolio_info = random_portfolio_generator.generate_evaluate_bulk(
                 n_portfolios=n_synthetic_portfolios,
                 portfolio_size=n_portfolios,
-                ensemble_size=20,
+                ensemble_size=100,
                 seed=seed,
                 backend="ray"
             )
@@ -385,19 +389,29 @@ def zeroshot_results_metalearning(
 
         repo.random_portfolio_generator = random_portfolio_generator
 
-        for i in n_portfolios:
-            m_e = random_portfolio_generator.metric_errors[i]
-            portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[i].keys())
-            dd_with_portfolio = dd.copy()
-            dd_with_portfolio = random_portfolio_generator.concatenate_bulk(real_errors=dd_with_portfolio,
-                                                             synthetic_errors=m_e,
-                                                             portfolio_names=portfolio_names)
+        for n_portfolio in n_portfolios:
+            m_e = random_portfolio_generator.metric_errors[n_portfolio]
+            portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[n_portfolio].keys())
+            dd_with_syn_portfolio = dd.copy()
+            dd_with_syn_portfolio = random_portfolio_generator.concatenate_bulk(base_df=dd_with_syn_portfolio,
+                                                                                to_add_series_list=m_e,
+                                                                                portfolio_names=portfolio_names
+                                                                                )
 
             if add_zeroshot_portfolios:
-                dd_with_portfolio = random_portfolio_generator.add_zeroshot(n_portfolio=i, dd=dd_with_portfolio, loss=loss)
-                portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[i].keys())
+                zeroshot_metric_errors, _, zeroshot_config_name = cache_function(fun=lambda: random_portfolio_generator.generate_evaluate_zeroshot(n_portfolio=n_portfolio, dd=dd.copy(), loss=loss),
+                                                                                 cache_name=f"random_portfolio_generator_zeroshot_n_portfolio_{n_portfolio}",
+                                                                                 cache_path=results_dir,
+                                                                                 ignore_cache=ignore_cache,
+                                                                                 )
+                # zeroshot_metric_errors, _, zeroshot_config_name = random_portfolio_generator.generate_evaluate_zeroshot(n_portfolio=n_portfolio, dd=dd.copy(), loss=loss)
+                dd_with_syn_portfolio = random_portfolio_generator.concatenate(base_df=dd_with_syn_portfolio,
+                                                                               to_add_series=zeroshot_metric_errors,
+                                                                               portfolio_name=zeroshot_config_name
+                                                                               )
+                portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[n_portfolio].keys())
 
-            df_r = transform_ranks(loss, dd_with_portfolio)
+            df_r = transform_ranks(loss, dd_with_syn_portfolio)
             df_r.fillna(value=np.nanmax(df_r.values), inplace=True)
             assert not any(df_r.isna().values.reshape(-1))
             df_rank_n_portfolios.append(df_r)

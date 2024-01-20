@@ -264,8 +264,8 @@ def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, ma
         for j, metric in enumerate(["normalized-error", "rank"]):
             # Processing methods without metalearning
             df_portfolio = df.loc[df.method.isin(without_metalearning)].copy()
-            df_portfolio['seed'] = df_portfolio['method'].str.extract(r'-S(\d+)').astype(int)
-            df_portfolio[dimension] = df_portfolio['method'].apply(lambda s: int(s.split("-")[1][1:]))
+
+            df_portfolio[dimension] = df_portfolio['method'].apply(lambda s: int(s.split("-")[1][1:].split(" ")[0]))
             df_portfolio = df_portfolio[df_portfolio[dimension] > 1]
 
             # Group by dimension and seed
@@ -277,9 +277,9 @@ def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, ma
 
             # Processing methods with metalearning
             df_portfolio_metalearning = df.loc[df.method.isin(with_metalearning)].copy()
-            df_portfolio_metalearning['seed'] = df_portfolio_metalearning['method'].str.extract(r'-S(\d+)').astype(int)
+
             df_portfolio_metalearning[dimension] = df_portfolio_metalearning['method'].apply(
-                lambda s: int(s.split("-")[1][1:]))
+                lambda s: int(s.split("-")[1][1:].split(" ")[0]))
             df_portfolio_metalearning = df_portfolio_metalearning[df_portfolio_metalearning[dimension] > 1]
 
             # Group by dimension and seed
@@ -326,7 +326,7 @@ def save_total_runtime_to_file(total_time_h):
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416")
+    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416_30")
     parser.add_argument("--n_folds", type=int, default=-1, required=False,
                         help="Number of folds to consider when evaluating all baselines. Uses all if set to -1.")
     parser.add_argument("--n_datasets", type=int, required=False, help="Number of datasets to consider when evaluating all baselines.")
@@ -425,8 +425,8 @@ if __name__ == "__main__":
 
     n_eval_folds = args.n_folds
     # n_portfolios = [5, 10, 50, 100, n_portfolios_default]
-    n_portfolios = [2, 3, 4, 5, 10, 20]
-    # n_portfolios = [2, 3]
+    # n_portfolios = [2, 3, 4, 5, 10, 20]
+    n_portfolios = [2, 3]
     max_runtimes = [300, 600, 1800, 3600, 3600 * 4, 24 * 3600]
     # n_training_datasets = list(range(10, 210, 10))
     # n_training_configs = list(range(10, 210, 10))
@@ -583,35 +583,15 @@ if __name__ == "__main__":
     for seed in range(n_seeds):
         print(f"running seed {seed}")
 
-        experiments.append(
-            Experiment(
-                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-{seed}",
-                run_fun=lambda s=seed: zeroshot_results_metalearning(
-                              n_portfolios=n_portfolios,
-                              name=f"zeroshot-metalearning-synthetic-portfolios-{expname}",
-                              expname=expname,
-                              max_runtimes=[None],
-                              seed=s,
-                              **experiment_common_kwargs,
-                              )
-            )
-        )
-
-        experiments.append(Experiment(
-            expname=expname, name=f"zeroshot-{expname}-num-portfolios-{seed}",
-            run_fun=lambda s=seed: zeroshot_results(n_portfolios=n_portfolios, max_runtimes=[None], seed=s, **experiment_common_kwargs)
-            ))
-
         # experiments.append(
         #     Experiment(
-        #         expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-with-zeroshot-portfolio-{seed}",
+        #         expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-{seed}",
         #         run_fun=lambda s=seed: zeroshot_results_metalearning(
         #                       n_portfolios=n_portfolios,
-        #                       name=f"zeroshot-metalearning-synthetic-portfolios-with-zeroshot-portfolio-{expname}",
+        #                       name=f"zeroshot-metalearning-synthetic-portfolios-{expname}",
         #                       expname=expname,
         #                       max_runtimes=[None],
         #                       seed=s,
-        #                       add_zeroshot_portfolios=True,
         #                       **experiment_common_kwargs,
         #                       )
         #     )
@@ -621,6 +601,26 @@ if __name__ == "__main__":
         #     expname=expname, name=f"zeroshot-{expname}-num-portfolios-{seed}",
         #     run_fun=lambda s=seed: zeroshot_results(n_portfolios=n_portfolios, max_runtimes=[None], seed=s, **experiment_common_kwargs)
         #     ))
+
+        experiments.append(
+            Experiment(
+                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-with-zeroshot-portfolio-{seed}",
+                run_fun=lambda s=seed: zeroshot_results_metalearning(
+                              n_portfolios=n_portfolios,
+                              name=f"zeroshot-metalearning-synthetic-portfolios-with-zeroshot-portfolio-{expname}",
+                              expname=expname,
+                              max_runtimes=[None],
+                              seed=s,
+                              add_zeroshot_portfolios=True,
+                              **experiment_common_kwargs,
+                              )
+            )
+        )
+
+        experiments.append(Experiment(
+            expname=expname, name=f"zeroshot-{expname}-num-portfolios-{seed}",
+            run_fun=lambda s=seed: zeroshot_results(n_portfolios=n_portfolios, max_runtimes=[None], seed=s, **experiment_common_kwargs)
+            ))
 
         # Automl baselines such as Autogluon best, high, medium quality
         experiments.append(Experiment(
@@ -688,7 +688,7 @@ if __name__ == "__main__":
             experiment.data(ignore_cache=ignore_cache) for experiment in experiments
         ])
     # De-duplicate in case we ran a config multiple times
-    df = df.drop_duplicates(subset=["method", "dataset", "fold"])
+    df = df.drop_duplicates(subset=["method", "dataset", "fold", "seed"])
     df = rename_dataframe(df)
 
     # Save results

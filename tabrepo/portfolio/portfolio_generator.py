@@ -72,17 +72,17 @@ class AbstractPortfolioGenerator:
             suffix += " (ensemble)"
         return f"Portfolio-ZS{suffix}"
 
-    def concatenate(self, real_errors: pd.DataFrame, synthetic_errors: pd.Series, portfolio_name: str) -> pd.DataFrame:
-        metric_errors_prepared = self._prepare_merge(metric_errors=synthetic_errors, portfolio_name=portfolio_name)
-        return pd.concat([real_errors, metric_errors_prepared], axis=0, ignore_index=True)
+    def concatenate(self, base_df: pd.DataFrame, to_add_series: pd.Series, portfolio_name: str) -> pd.DataFrame:
+        metric_errors_prepared = self._prepare_merge(metric_errors=to_add_series, portfolio_name=portfolio_name)
+        return pd.concat([base_df, metric_errors_prepared], axis=0, ignore_index=True)
 
-    def concatenate_bulk(self, real_errors: pd.DataFrame, synthetic_errors: List[pd.Series], portfolio_names: List[str]) -> pd.DataFrame:
-        assert all(len(series) == len(synthetic_errors[0]) for series in synthetic_errors), "All Series must have the same length"
-        assert len(synthetic_errors) == len(portfolio_names)
+    def concatenate_bulk(self, base_df: pd.DataFrame, to_add_series_list: List[pd.Series], portfolio_names: List[str]) -> pd.DataFrame:
+        assert all(len(series) == len(to_add_series_list[0]) for series in to_add_series_list), "All Series must have the same length"
+        assert len(to_add_series_list) == len(portfolio_names)
 
-        for synthetic_errors_i, portfolio_name_i in zip(synthetic_errors, portfolio_names):
-            real_errors = self.concatenate(real_errors=real_errors, synthetic_errors=synthetic_errors_i, portfolio_name=portfolio_name_i)
-        return real_errors
+        for to_add_series, portfolio_name_i in zip(to_add_series_list, portfolio_names):
+            base_df = self.concatenate(base_df=base_df, to_add_series=to_add_series, portfolio_name=portfolio_name_i)
+        return base_df
 
     def _prepare_merge(self, metric_errors: pd.Series, portfolio_name: str):
         metric_errors = metric_errors.reset_index(drop=False)
@@ -144,7 +144,7 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
 
         return self.metric_errors, self.ensemble_weights, self.portfolio_name_to_config
 
-    def add_zeroshot(self, n_portfolio: int, dd: pd.DataFrame, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, loss: str = "metric_error", backend: str = "ray") -> pd.DataFrame:
+    def generate_evaluate_zeroshot(self, n_portfolio: int, dd: pd.DataFrame, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, loss: str = "metric_error", backend: str = "ray") -> pd.DataFrame:
         if datasets is None:
             datasets = self.repo.datasets()
 
@@ -189,12 +189,11 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
             rank=False,
         )
 
-        # zeroshot_config_name = f"ZS-{str(list(ensemble_weights.columns))}"
         zeroshot_config_name = self.zeroshot_name(n_portfolio=n_portfolio, ensemble_size=ensemble_size)
-        metric_errors_prepared = self._prepare_merge(metric_errors, zeroshot_config_name)
+        # metric_errors_prepared = self._prepare_merge(metric_errors, zeroshot_config_name)
         self.portfolio_name_to_config[n_portfolio][zeroshot_config_name] = portfolio_configs
-
-        return pd.concat([dd, metric_errors_prepared], axis=0)
+        return metric_errors, ensemble_weights, zeroshot_config_name
+        # return pd.concat([dd, metric_errors_prepared], axis=0)
 
 
 # class ZeroShotPortfolioGenerator(AbstractPortfolioGenerator):

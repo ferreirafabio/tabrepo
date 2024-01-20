@@ -43,6 +43,8 @@ class ResultRow:
     time_train_s: float
     time_infer_s: float
     config_selected: list = None
+    portfolio_name: list = None
+    seed: int = 0
 
 
 def evaluate_configs(
@@ -54,7 +56,9 @@ def evaluate_configs(
         config_selected: List[str],
         ensemble_size: int = default_ensemble_size,
         config_sampled: List[str] = None,
+        portfolio_name: List[str] = None,
         folds: List[int] = range(10),
+        seed: int = 0,
 ) -> List[ResultRow]:
     """
 
@@ -66,7 +70,9 @@ def evaluate_configs(
     :param ensemble_size:
     :param config_selected:
     :param config_sampled: the list of configurations that was seen, to count total runtime. Default to `config_selected`
+    :param portfolio_name: proxy name for configs_selected (e.g. used for synthetic portfolios)
     :param folds:
+    :param seed:
     :return: list of results for each fold in `folds` evaluated on task `tid` with `config_selected` configurations
     """
     if not config_sampled:
@@ -126,6 +132,8 @@ def evaluate_configs(
             time_train_s=sum(runtimes.values()),
             time_infer_s=sum(latencies.values()),
             config_selected=config_sampled,
+            portfolio_name=portfolio_name,
+            seed=seed,
         ))
     return rows
 
@@ -325,7 +333,6 @@ def zeroshot_name(
         n_training_fold: int = None, n_training_config: int = None,
         max_runtime: float = default_runtime,
         name_suffix: str = "",
-        seed: int = 0,
 ):
     """
     :return: name of the zeroshot method such as Zeroshot-N20-C40 if n_training_dataset or n_training_folds are not
@@ -335,7 +342,7 @@ def zeroshot_name(
     suffix = [
         f"-{letter}{x}" if x is not None else ""
         for letter, x in
-        [("N", n_portfolio), ("D", n_training_dataset), ("S", n_training_fold), ("M", n_training_config), ("S", seed)]
+        [("N", n_portfolio), ("D", n_training_dataset), ("S", n_training_fold), ("M", n_training_config)]
     ]
     suffix += name_suffix
 
@@ -410,7 +417,6 @@ def zeroshot_results(
             n_training_fold=n_training_fold,
             max_runtime=max_runtime,
             n_training_config=n_training_config,
-            seed=seed,
         )
 
         # restrict number of evaluation fold
@@ -480,6 +486,7 @@ def zeroshot_results(
             tid=test_tid,
             method=method_name,
             folds=range(n_eval_folds),
+            seed=seed,
         )
 
     dd = repo._zeroshot_context.df_configs_ranked
