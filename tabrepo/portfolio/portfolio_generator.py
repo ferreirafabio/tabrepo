@@ -151,30 +151,6 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
         if folds is None:
             folds = self.repo.folds
 
-        # for test_dataset in datasets:
-        #     available_tids = [self.repo.dataset_to_tid(dataset) for dataset in datasets if dataset != test_dataset]
-        #     selected_tids = set(available_tids)
-        #
-        #     train_tasks = []
-        #     for task in df_rank.columns:
-        #         tid, fold = task.split("_")
-        #         if int(tid) in selected_tids and int(fold) < max(folds):
-        #             train_tasks.append(task)
-
-            # indices = zeroshot_configs(-df_rank[train_tasks].values.T, n_portfolio)
-            # portfolio_configs = [df_rank.index[i] for i in indices]
-
-            # metric_errors_all_datasets.append(
-            #     self.repo.evaluate_ensemble(
-            #         datasets=[test_dataset],
-            #         configs=portfolio_configs,
-            #         ensemble_size=ensemble_size,
-            #         backend='native',
-            #         folds=self.repo.folds,
-            #         rank=False,
-            #     )
-            # )
-
         df_rank = transform_ranks(loss, deepcopy(dd))
 
         indices = zeroshot_configs(-df_rank.values.T, n_portfolio)
