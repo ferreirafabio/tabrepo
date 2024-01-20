@@ -166,25 +166,5 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
         )
 
         zeroshot_config_name = self.zeroshot_name(n_portfolio=n_portfolio, ensemble_size=ensemble_size)
-        # metric_errors_prepared = self._prepare_merge(metric_errors, zeroshot_config_name)
         self.portfolio_name_to_config[n_portfolio][zeroshot_config_name] = portfolio_configs
         return metric_errors, ensemble_weights, zeroshot_config_name
-        # return pd.concat([dd, metric_errors_prepared], axis=0)
-
-
-# class ZeroShotPortfolioGenerator(AbstractPortfolioGenerator):
-#     def __init__(self, repo: EvaluationRepository, n_portfolios: List[int]):
-#         super().__init__(repo=repo)
-#         self.portfolio_name_to_config = {portfolio_size: {} for portfolio_size in n_portfolios}
-
-
-
-# class BestPortfolioGenerator(AbstractPortfolioGenerator):
-#     def __init__(self, repo: EvaluationRepository):
-#         super().__init__(repo=repo)
-#
-#     def generate(self, portfolio_size: int, random_config_fraction: float = 0.0, seed: int = 0) -> List[str]:
-#         n_random_ensembles = int(sample_size * random_config_fraction)
-#
-#         rng = np.random.default_rng(seed=seed)
-#         return list(rng.choice(self.repo.configs(), portfolio_size, replace=False))

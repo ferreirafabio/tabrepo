@@ -287,10 +287,13 @@ def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, ma
             # Plot settings and baseline
             ax.set_xlim([0, None])
             ax.set_xticks(dim)
+            ax.tick_params(axis='both', which='major', labelsize=18)
             if j == 1:
                 ax.set_xlabel(legend)
+                ax.set_xlabel(legend, fontsize=18)
             if i == 0:
                 ax.set_ylabel(metric)
+                ax.set_ylabel(metric, fontsize=18)
             ax.grid()
 
             # Plotting the baseline (AutoGluon)
@@ -300,9 +303,11 @@ def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, ma
 
             # Setting legend properties
             if i == 0 and j == 0:
-                ax.legend(fontsize=8)
+                legend_obj = ax.legend(fontsize=18)
+                for text in legend_obj.get_texts():
+                    text.set_fontsize(18)
 
-    fig.suptitle(f"{exp_name}, {title}")
+    fig.suptitle(f"{exp_name}, {title}", fontsize=18)
     plt.tight_layout()
     plt.savefig(str(Paths.data_root / "results-baseline-comparison" / exp_name / save_name / f"sensitivity.png"))
     if show:
@@ -414,8 +419,8 @@ if __name__ == "__main__":
 
     n_eval_folds = args.n_folds
     # n_portfolios = [5, 10, 50, 100, n_portfolios_default]
-    n_portfolios = [2, 3, 4, 5, 10, 20]
-    # n_portfolios = [2, 3]
+    # n_portfolios = [2, 3, 4, 5, 10, 20]
+    n_portfolios = [2, 3]
     max_runtimes = [300, 600, 1800, 3600, 3600 * 4, 24 * 3600]
     # n_training_datasets = list(range(10, 210, 10))
     # n_training_configs = list(range(10, 210, 10))
@@ -423,7 +428,7 @@ if __name__ == "__main__":
     n_training_datasets = [5, 10, 25, 50, 75, 100, 125, 150, 175, 199]
     # n_training_configs = [1, 5, 10, 25, 50, 75, 100, 125, 150, 175, 200]
     n_training_configs = [1, 5, 10, 25, 50, 75, 100, 125, 150, 175, 200]
-    n_seeds = 3
+    n_seeds = 1
     n_training_folds = [1, 2, 5, 10]
     n_ensembles = [10, 20, 40, 80]
     linestyle_ensemble = "--"

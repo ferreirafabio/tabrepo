@@ -220,30 +220,6 @@ def zeroshot_results_metalearning(
         val_meta.drop(['dataset'], axis=1, inplace=True)
         test_meta_wo_dataset = test_meta.drop(['dataset'], axis=1)
 
-        # print("-------------meta-feature ablation study-----------------")
-        # # 1 feature
-        # # meta_features_to_consider = ["rank", "NumberOfMissingValues"]
-        # # 3 features
-        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize"]
-        # 5 features
-        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues"]
-        # 8 features
-        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures"]
-        # 9 features
-        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses"]
-        # 10 features
-        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type"]
-        # 11 features
-        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type", "MinorityClassSize"]
-        # 12 features --> done
-        # meta_features_to_consider = ["rank", "NumberOfMissingValues", "NumberOfSymbolicFeatures", "MajorityClassSize", "NumberOfInstancesWithMissingValues", "MaxNominalAttDistinctValues", "NumberOfNumericFeatures", "NumberOfInstances", "NumberOfFeatures", "NumberOfClasses", "problem_type", "MinorityClassSize", "framework"]
-        # train_meta.drop(columns=train_meta.columns.difference(meta_features_to_consider), inplace=True)
-        # val_meta.drop(columns=val_meta.columns.difference(meta_features_to_consider), inplace=True)
-        # test_meta_wo_dataset.drop(columns=test_meta_wo_dataset.columns.difference(meta_features_to_consider), inplace=True)
-        # print(f"remaining columns train: {list(train_meta.columns)}")
-        # print(f"remaining columns val: {list(val_meta.columns)}")
-        # print(f"remaining columns test: {list(test_meta_wo_dataset.columns)}")
-
         # test_meta.drop(['std_dev_rank'], axis=1, inplace=True)
 
         if use_extended_meta_features:
@@ -275,7 +251,7 @@ def zeroshot_results_metalearning(
                 # "GBMLarge",
             ],
             },
-            num_cpus=1,
+            # num_cpus=1,
             # presets="best_quality",
         )
 
@@ -405,11 +381,12 @@ def zeroshot_results_metalearning(
                                                                                  cache_path=results_dir,
                                                                                  ignore_cache=ignore_cache,
                                                                                  )
-                # zeroshot_metric_errors, _, zeroshot_config_name = random_portfolio_generator.generate_evaluate_zeroshot(n_portfolio=n_portfolio, dd=dd.copy(), loss=loss)
+
                 dd_with_syn_portfolio = random_portfolio_generator.concatenate(base_df=dd_with_syn_portfolio,
                                                                                to_add_series=zeroshot_metric_errors,
                                                                                portfolio_name=zeroshot_config_name
                                                                                )
+
                 portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[n_portfolio].keys())
 
             df_r = transform_ranks(loss, dd_with_syn_portfolio)
