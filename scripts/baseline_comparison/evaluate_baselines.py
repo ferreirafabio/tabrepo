@@ -346,9 +346,8 @@ if __name__ == "__main__":
                         help="indicates whether we should add synthetic portfolios to the metalearning train data")
     parser.add_argument("--n_synthetic_portfolios", type=int, default=1000, required=False,
                         help="Number of synthetic portfolios used")
-
-    # parser.add_argument("--portfolio_size", type=int, default=1, required=False,
-    #                     help="Size of synthetic portfolios used")
+    parser.add_argument("--add_zeroshot_portfolios", action="store_true",
+                        help="indicates whether we should add zeroshot portfolios to the synthetic portfolios to the metalearning train data")
 
     parser.add_argument("--use_metalearning_kfold_training", action="store_true",
                         help="indicates whether we should turn off using kfold training (default: 5 splits) as opposed to leave-one-dataset training. Using this flag increases training and evaluation time.")
@@ -395,6 +394,7 @@ if __name__ == "__main__":
     generate_feature_importance = args.generate_feature_importance
     n_splits_kfold = args.n_splits_kfold
     n_synthetic_portfolios = args.n_synthetic_portfolios
+    add_zeroshot_portfolios = args.add_zeroshot_portfolios
 
     use_extended_mf = False
     if (args.extended_mf_general or
@@ -406,6 +406,11 @@ if __name__ == "__main__":
 
     if generate_feature_importance:
         assert use_metalearning_kfold_training, "Feature importance can only be generated with kfold training"
+
+    add_zeroshot_portfolios_str = ""
+    if add_zeroshot_portfolios:
+        assert use_synthetic_portfolios, "add_zeroshot_portfolios can only be used if synthetic portfolios are enabled"
+        add_zeroshot_portfolios_str = "with-added-zeroshot-portfolio"
 
     if n_datasets:
         expname += f"-{n_datasets}"
@@ -604,14 +609,14 @@ if __name__ == "__main__":
 
         experiments.append(
             Experiment(
-                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-with-zeroshot-portfolio-{seed}",
+                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios{add_zeroshot_portfolios_str}-{seed}",
                 run_fun=lambda s=seed: zeroshot_results_metalearning(
                               n_portfolios=n_portfolios,
                               name=f"zeroshot-metalearning-synthetic-portfolios-with-zeroshot-portfolio-{expname}",
                               expname=expname,
                               max_runtimes=[None],
                               seed=s,
-                              add_zeroshot_portfolios=True,
+                              add_zeroshot_portfolios=add_zeroshot_portfolios,
                               **experiment_common_kwargs,
                               )
             )
