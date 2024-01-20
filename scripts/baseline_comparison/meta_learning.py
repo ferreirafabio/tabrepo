@@ -182,6 +182,8 @@ def zeroshot_results_metalearning(
         df_rank_all = df_rank.stack().reset_index(name='rank')
         df_rank_all["dataset"] = df_rank_all["task"].apply(repo.task_to_dataset)
 
+        print(f"unique frameworks in data: {len(df_rank_all['framework'].unique())}")
+
         # create meta train / test splits
         train_mask = df_rank_all["task"].isin(train_tasks)
         df_rank_train = df_rank_all[train_mask].drop(columns=["task"])
@@ -376,11 +378,12 @@ def zeroshot_results_metalearning(
                                                                                 )
 
             if add_zeroshot_portfolios:
-                zeroshot_metric_errors, _, zeroshot_config_name = cache_function(fun=lambda: random_portfolio_generator.generate_evaluate_zeroshot(n_portfolio=n_portfolio, dd=dd.copy(), loss=loss),
+                zeroshot_metric_errors, _, zeroshot_config_name, portfolio_configs_zs, zeroshot_config_name = cache_function(fun=lambda: random_portfolio_generator.generate_evaluate_zeroshot(n_portfolio=n_portfolio, dd=dd.copy(), loss=loss),
                                                                                  cache_name=f"random_portfolio_generator_zeroshot_n_portfolio_{n_portfolio}",
                                                                                  cache_path=results_dir,
-                                                                                 ignore_cache=ignore_cache,
+                                                                                 # ignore_cache=ignore_cache,
                                                                                  )
+                random_portfolio_generator.portfolio_name_to_config[n_portfolio][zeroshot_config_name] = portfolio_configs_zs
 
                 dd_with_syn_portfolio = random_portfolio_generator.concatenate(base_df=dd_with_syn_portfolio,
                                                                                to_add_series=zeroshot_metric_errors,

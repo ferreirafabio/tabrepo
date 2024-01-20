@@ -166,5 +166,5 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
         )
 
         zeroshot_config_name = self.zeroshot_name(n_portfolio=n_portfolio, ensemble_size=ensemble_size)
-        self.portfolio_name_to_config[n_portfolio][zeroshot_config_name] = portfolio_configs
-        return metric_errors, ensemble_weights, zeroshot_config_name
+        # self.portfolio_name_to_config[n_portfolio][zeroshot_config_name] = portfolio_configs
+        return metric_errors, ensemble_weights, zeroshot_config_name, portfolio_configs, zeroshot_config_name

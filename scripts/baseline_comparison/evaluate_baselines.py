@@ -512,6 +512,7 @@ if __name__ == "__main__":
         save_name=exp_title_save_name,
         results_dir=results_dir,
         ray_process_ratio=ray_process_ratio,
+        ignore_cache=ignore_cache,
     )
 
     experiments = [
