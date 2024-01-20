@@ -251,7 +251,7 @@ def zeroshot_results_metalearning(
                 # "GBMLarge",
             ],
             },
-            # num_cpus=1,
+            num_cpus=1,
             # presets="best_quality",
         )
 
