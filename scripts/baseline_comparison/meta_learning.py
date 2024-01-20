@@ -66,6 +66,7 @@ def zeroshot_results_metalearning(
         use_meta_features: bool = True,
         name: str = "",
         expname: str = "",
+        method_name_suffix: str = " metalearning",
         loss: str = "metric_error",
         use_extended_meta_features: bool = False,
         use_synthetic_portfolios: bool = False,
@@ -99,7 +100,7 @@ def zeroshot_results_metalearning(
 
     def evaluate_dataset(test_datasets, n_portfolio_model_frameworks_df_rank, n_ensemble, n_training_dataset, n_training_fold, n_training_config,
                          max_runtime, repo: EvaluationRepository, rank_scorer, normalized_scorer,
-                         use_meta_features, seed):
+                         use_meta_features, method_name_suffix, seed):
 
         df_rank, model_frameworks, n_portfolio = n_portfolio_model_frameworks_df_rank
 
@@ -110,7 +111,7 @@ def zeroshot_results_metalearning(
             n_training_fold=n_training_fold,
             max_runtime=max_runtime,
             n_training_config=n_training_config,
-            name_suffix=" metalearning",
+            name_suffix=method_name_suffix,
         )
 
         _n_training_dataset = n_training_dataset
@@ -458,6 +459,7 @@ def zeroshot_results_metalearning(
                      # model_frameworks=model_frameworks,
                      use_meta_features=use_meta_features,
                      seed=seed,
+                     method_name_suffix=method_name_suffix,
                      ),
         engine=engine,
     )

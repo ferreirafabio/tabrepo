@@ -257,42 +257,36 @@ def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, ma
         max_runtimes_in_h = max_runtimes[0] // 3600
 
     methods = df["method"].unique()
-    with_metalearning = [method for method in methods if 'metalearning' in method]
+    # with_metalearning = [method for method in methods if 'metalearning' in method]
+    # without_metalearning = [method for method in methods if 'metalearning' not in method and "ensemble" in method]
+
+    with_metalearning = [method for method in methods if 'metalearning' in method and "zeroshot" not in method]
     without_metalearning = [method for method in methods if 'metalearning' not in method and "ensemble" in method]
+    with_metalearning_zeroshot = [method for method in methods if 'metalearning' in method and "zeroshot" in method]
 
     for i, (dimension, legend) in enumerate(dimensions):
         for j, metric in enumerate(["normalized-error", "rank"]):
-            # Processing methods without metalearning
-            df_portfolio = df.loc[df.method.isin(without_metalearning)].copy()
-
-            df_portfolio[dimension] = df_portfolio['method'].apply(lambda s: int(s.split("-")[1][1:].split(" ")[0]))
-            df_portfolio = df_portfolio[df_portfolio[dimension] > 1]
-
-            # Group by dimension and seed
-            grouped = df_portfolio.groupby([dimension, 'seed'])[metric].agg(["mean", "sem"]).reset_index()
-            # Calculate overall mean and SEM across seeds
-            dim, mean, sem = grouped.groupby(dimension).agg({"mean": "mean", "sem": "mean"}).reset_index().values.T
             ax = axes[j]
-            ax.errorbar(dim, mean, sem, label=f"zeroshot", linestyle="", marker="o")
 
-            # Processing methods with metalearning
-            df_portfolio_metalearning = df.loc[df.method.isin(with_metalearning)].copy()
+            # Common function to process and plot data
+            def process_and_plot(df_subset, label, linestyle, marker):
+                df_subset[dimension] = df_subset['method'].apply(
+                    lambda s: int(s.split("-")[1][1:].split(" ")[0]))
+                df_subset = df_subset[df_subset[dimension] > 1]
 
-            df_portfolio_metalearning[dimension] = df_portfolio_metalearning['method'].apply(
-                lambda s: int(s.split("-")[1][1:].split(" ")[0]))
-            df_portfolio_metalearning = df_portfolio_metalearning[df_portfolio_metalearning[dimension] > 1]
+                grouped = df_subset.groupby([dimension, 'seed'])[metric].agg(["mean", "sem"]).reset_index()
+                dim, mean, sem = grouped.groupby(dimension).agg({"mean": "mean", "sem": "mean"}).reset_index().values.T
+                ax.errorbar(dim, mean, sem, label=label, linestyle=linestyle, marker=marker)
+                return dim
 
-            # Group by dimension and seed
-            grouped_metalearning = df_portfolio_metalearning.groupby([dimension, 'seed'])[metric].agg(
-                ["mean", "sem"]).reset_index()
-            # Calculate overall mean and SEM across seeds
-            dim, mean, sem = grouped_metalearning.groupby(dimension).agg(
-                {"mean": "mean", "sem": "mean"}).reset_index().values.T
-            ax.errorbar(dim, mean, sem, label=f"zeroshot Metalearning", linestyle="", marker="o")
+            # Process and plot for each category
+            dim = process_and_plot(df.loc[df.method.isin(without_metalearning)].copy(), "zeroshot", "", "o")
+            process_and_plot(df.loc[df.method.isin(with_metalearning)].copy(), "zeroshot Metalearning", "", "o")
+            process_and_plot(df.loc[df.method.isin(with_metalearning_zeroshot)].copy(), "zeroshot Metalearning with Zeroshot Portfolios", "", "o")
 
-            # Setting plot properties
+            # Plot settings and baseline
             ax.set_xlim([0, None])
-            ax.set_xticks(np.unique(dim))
+            ax.set_xticks(dim)
             if j == 1:
                 ax.set_xlabel(legend)
             if i == 0:
@@ -301,13 +295,12 @@ def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, ma
 
             # Plotting the baseline (AutoGluon)
             df_ag = df.loc[df['method'].str.contains("AutoGluon best"), metric].copy()
-            ax.hlines(df_ag.mean(), xmin=0, xmax=max(dim), color="black", label="AutoGluon", ls="--")
+            if not df_ag.empty:
+                ax.hlines(df_ag.mean(), xmin=0, xmax=max(dim), color="black", label="AutoGluon", ls="--")
 
             # Setting legend properties
             if i == 0 and j == 0:
-                legend_obj = ax.legend()
-                for text in legend_obj.get_texts():
-                    text.set_fontsize(8)
+                ax.legend(fontsize=8)
 
     fig.suptitle(f"{exp_name}, {title}")
     plt.tight_layout()
@@ -326,7 +319,7 @@ def save_total_runtime_to_file(total_time_h):
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416")
+    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416_30")
     parser.add_argument("--n_folds", type=int, default=-1, required=False,
                         help="Number of folds to consider when evaluating all baselines. Uses all if set to -1.")
     parser.add_argument("--n_datasets", type=int, required=False, help="Number of datasets to consider when evaluating all baselines.")
@@ -346,9 +339,6 @@ if __name__ == "__main__":
                         help="indicates whether we should add synthetic portfolios to the metalearning train data")
     parser.add_argument("--n_synthetic_portfolios", type=int, default=1000, required=False,
                         help="Number of synthetic portfolios used")
-    parser.add_argument("--add_zeroshot_portfolios", action="store_true",
-                        help="indicates whether we should add zeroshot portfolios to the synthetic portfolios to the metalearning train data")
-
     parser.add_argument("--use_metalearning_kfold_training", action="store_true",
                         help="indicates whether we should turn off using kfold training (default: 5 splits) as opposed to leave-one-dataset training. Using this flag increases training and evaluation time.")
     parser.add_argument("--n_splits_kfold", type=int, default=5, required=False,
@@ -394,7 +384,6 @@ if __name__ == "__main__":
     generate_feature_importance = args.generate_feature_importance
     n_splits_kfold = args.n_splits_kfold
     n_synthetic_portfolios = args.n_synthetic_portfolios
-    add_zeroshot_portfolios = args.add_zeroshot_portfolios
 
     use_extended_mf = False
     if (args.extended_mf_general or
@@ -406,11 +395,6 @@ if __name__ == "__main__":
 
     if generate_feature_importance:
         assert use_metalearning_kfold_training, "Feature importance can only be generated with kfold training"
-
-    add_zeroshot_portfolios_str = ""
-    if add_zeroshot_portfolios:
-        assert use_synthetic_portfolios, "add_zeroshot_portfolios can only be used if synthetic portfolios are enabled"
-        add_zeroshot_portfolios_str = "with-added-zeroshot-portfolio"
 
     if n_datasets:
         expname += f"-{n_datasets}"
@@ -430,8 +414,8 @@ if __name__ == "__main__":
 
     n_eval_folds = args.n_folds
     # n_portfolios = [5, 10, 50, 100, n_portfolios_default]
-    n_portfolios = [2, 3, 4, 5, 10, 20]
-    # n_portfolios = [2, 3]
+    # n_portfolios = [2, 3, 4, 5, 10, 20]
+    n_portfolios = [2, 3]
     max_runtimes = [300, 600, 1800, 3600, 3600 * 4, 24 * 3600]
     # n_training_datasets = list(range(10, 210, 10))
     # n_training_configs = list(range(10, 210, 10))
@@ -609,14 +593,31 @@ if __name__ == "__main__":
 
         experiments.append(
             Experiment(
-                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios{add_zeroshot_portfolios_str}-{seed}",
+                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-with-zeroshot-portfolios-{seed}",
                 run_fun=lambda s=seed: zeroshot_results_metalearning(
                               n_portfolios=n_portfolios,
-                              name=f"zeroshot-metalearning-synthetic-portfolios-with-zeroshot-portfolio-{expname}",
+                              name=f"zeroshot-metalearning-synthetic-portfolios-with-zeroshot-portfolios-{expname}",
                               expname=expname,
                               max_runtimes=[None],
                               seed=s,
-                              add_zeroshot_portfolios=add_zeroshot_portfolios,
+                              add_zeroshot_portfolios=True,
+                              method_name_suffix=" metalearning with zeroshot portfolios",
+                              **experiment_common_kwargs,
+                              )
+            )
+        )
+
+        experiments.append(
+            Experiment(
+                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-{seed}",
+                run_fun=lambda s=seed: zeroshot_results_metalearning(
+                              n_portfolios=n_portfolios,
+                              name=f"zeroshot-metalearning-synthetic-portfolios-{expname}",
+                              expname=expname,
+                              max_runtimes=[None],
+                              seed=s,
+                              add_zeroshot_portfolios=False,
+                              method_name_suffix=" metalearning",
                               **experiment_common_kwargs,
                               )
             )
