@@ -319,7 +319,7 @@ def save_total_runtime_to_file(total_time_h):
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416_30")
+    parser.add_argument("--repo", type=str, help="Name of the repo to load", default="D244_F3_C1416")
     parser.add_argument("--n_folds", type=int, default=-1, required=False,
                         help="Number of folds to consider when evaluating all baselines. Uses all if set to -1.")
     parser.add_argument("--n_datasets", type=int, required=False, help="Number of datasets to consider when evaluating all baselines.")
@@ -414,8 +414,8 @@ if __name__ == "__main__":
 
     n_eval_folds = args.n_folds
     # n_portfolios = [5, 10, 50, 100, n_portfolios_default]
-    # n_portfolios = [2, 3, 4, 5, 10, 20]
-    n_portfolios = [2, 3]
+    n_portfolios = [2, 3, 4, 5, 10, 20]
+    # n_portfolios = [2, 3]
     max_runtimes = [300, 600, 1800, 3600, 3600 * 4, 24 * 3600]
     # n_training_datasets = list(range(10, 210, 10))
     # n_training_configs = list(range(10, 210, 10))
