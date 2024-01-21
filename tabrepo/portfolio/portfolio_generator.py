@@ -129,10 +129,10 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
 
     def generate_evaluate_bulk(self, n_portfolios: int, portfolio_size: List[int], datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, seed: int = 0, backend: str = "ray"):
         for p_s in portfolio_size:
-            print(f"generating synthetic portfolio of size {p_s}")
+            print(f"generating synthetic portfolio of size {p_s}" )
             metric_errors_ps, ensemble_weights_ps, portfolio_name_ps = [], [], []
             for i in range(n_portfolios):
-                print(f"generating portfolio {i}/{n_portfolios}")
+                print(f"generating portfolio {i}/{n_portfolios} (portfolio size {p_s} of {portfolio_size}")
                 metric_errors, ensemble_weights, portfolio_name = self.generate_evaluate(portfolio_size=p_s, datasets=datasets, folds=folds, ensemble_size=ensemble_size, n_portfolio_iter=i, seed=seed, backend=backend)
                 metric_errors_ps.append(metric_errors)
                 ensemble_weights_ps.append(ensemble_weights)
