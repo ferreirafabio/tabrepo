@@ -10,6 +10,7 @@ import os
 from tabrepo.portfolio.zeroshot_selection import zeroshot_configs
 from scripts.baseline_comparison.meta_learning_utils import transform_ranks
 from copy import deepcopy
+from tqdm import tqdm
 
 
 class AbstractPortfolioGenerator:
@@ -128,20 +129,26 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
         return metric_errors, ensemble_weights, portfolio_name
 
     def generate_evaluate_bulk(self, n_portfolios: int, portfolio_size: List[int], datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, seed: int = 0, backend: str = "ray"):
+        total_iterations = n_portfolios * len(portfolio_size)
+        pbar = tqdm(total=total_iterations, desc="Synthetic Portfolio Generation Progress")
+
         for p_s in portfolio_size:
             print(f"generating synthetic portfolio of size {p_s}" )
             metric_errors_ps, ensemble_weights_ps, portfolio_name_ps = [], [], []
             for i in range(n_portfolios):
-                print(f"generating portfolio {i}/{n_portfolios} (portfolio size {p_s} of {portfolio_size}")
+                pbar.set_description(f"Synthetic Portfolio Generation Progress (size {p_s})")
+                # print(f"generating portfolio {i}/{n_portfolios} (portfolio size {p_s} of {portfolio_size}")
                 metric_errors, ensemble_weights, portfolio_name = self.generate_evaluate(portfolio_size=p_s, datasets=datasets, folds=folds, ensemble_size=ensemble_size, n_portfolio_iter=i, seed=seed, backend=backend)
                 metric_errors_ps.append(metric_errors)
                 ensemble_weights_ps.append(ensemble_weights)
                 # portfolio_name_ps.append(portfolio_name)
+                pbar.update(1)
 
             self.metric_errors[p_s] = metric_errors_ps
             self.ensemble_weights[p_s] = ensemble_weights_ps
             # self.portfolio_name[p_s] = portfolio_name_ps
 
+        pbar.close()
         return self.metric_errors, self.ensemble_weights, self.portfolio_name_to_config
 
     def generate_evaluate_zeroshot(self, n_portfolio: int, dd: pd.DataFrame, datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, loss: str = "metric_error", backend: str = "ray") -> pd.DataFrame:
