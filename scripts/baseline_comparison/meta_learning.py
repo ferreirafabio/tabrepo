@@ -408,8 +408,12 @@ def zeroshot_results_metalearning(
         # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
         df_rank_n_portfolios.fillna(value=np.nanmax(df_rank_n_portfolios.values), inplace=True)
         assert not any(df_rank_n_portfolios.isna().values.reshape(-1))
-        df_rank_n_portfolios = [df_rank_n_portfolios]
-        model_frameworks_n_portfolios = [model_frameworks_original]
+        if n_portfolios and n_portfolios[0] is not None:
+            df_rank_n_portfolios = [df_rank_n_portfolios for i in range(len(n_portfolios))]
+            model_frameworks_n_portfolios = [model_frameworks_original for i in range(len(n_portfolios))]
+        else:
+            df_rank_n_portfolios = [df_rank_n_portfolios]
+            model_frameworks_n_portfolios = [model_frameworks_original]
 
     if use_metalearning_kfold_training:
         print(f"Using kfold training for metalearning")

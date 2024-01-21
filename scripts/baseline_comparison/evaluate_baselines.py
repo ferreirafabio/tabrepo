@@ -260,40 +260,44 @@ def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, ma
     # with_metalearning = [method for method in methods if 'metalearning' in method]
     # without_metalearning = [method for method in methods if 'metalearning' not in method and "ensemble" in method]
 
-    with_metalearning = [method for method in methods if 'metalearning' in method and "zeroshot" not in method]
+    with_metalearning = [method for method in methods if 'metalearning' in method and "zeroshot" not in method and "without synthetic" not in method]
     without_metalearning = [method for method in methods if 'metalearning' not in method and "ensemble" in method]
     with_metalearning_zeroshot = [method for method in methods if 'metalearning' in method and "zeroshot" in method]
+    with_metalearning_without_synthetic = [method for method in methods if 'metalearning' in method and "without synthetic" in method]
+    marker_size = 10
 
     for i, (dimension, legend) in enumerate(dimensions):
         for j, metric in enumerate(["normalized-error", "rank"]):
             ax = axes[j]
 
             # Common function to process and plot data
-            def process_and_plot(df_subset, label, linestyle, marker):
+            def process_and_plot(df_subset, label, linestyle, marker, marker_size):
                 df_subset[dimension] = df_subset['method'].apply(
                     lambda s: int(s.split("-")[1][1:].split(" ")[0]))
                 df_subset = df_subset[df_subset[dimension] > 1]
 
                 grouped = df_subset.groupby([dimension, 'seed'])[metric].agg(["mean", "sem"]).reset_index()
                 dim, mean, sem = grouped.groupby(dimension).agg({"mean": "mean", "sem": "mean"}).reset_index().values.T
-                ax.errorbar(dim, mean, sem, label=label, linestyle=linestyle, marker=marker)
+                ax.errorbar(dim, mean, sem, label=label, linestyle=linestyle, marker=marker, markersize=marker_size)
                 return dim
 
             # Process and plot for each category
-            dim = process_and_plot(df.loc[df.method.isin(without_metalearning)].copy(), "zeroshot", "", "o")
-            process_and_plot(df.loc[df.method.isin(with_metalearning)].copy(), "zeroshot Metalearning", "", "o")
-            process_and_plot(df.loc[df.method.isin(with_metalearning_zeroshot)].copy(), "zeroshot Metalearning with Zeroshot Portfolios", "", "o")
+            dim = process_and_plot(df.loc[df.method.isin(without_metalearning)].copy(), "zeroshot", "", "o", marker_size=marker_size)
+            process_and_plot(df.loc[df.method.isin(with_metalearning_without_synthetic)].copy(),"zeroshot Metalearning (without Synthetic Portfolios)", "", "o", marker_size=marker_size)
+            process_and_plot(df.loc[df.method.isin(with_metalearning)].copy(), "zeroshot Metalearning (with SP)", "", "o", marker_size=marker_size)
+            process_and_plot(df.loc[df.method.isin(with_metalearning_zeroshot)].copy(), "zeroshot Metalearning (with SP + zeroshot portfolios)", "", "o", marker_size=marker_size)
+
 
             # Plot settings and baseline
             ax.set_xlim([0, None])
             ax.set_xticks(dim)
-            ax.tick_params(axis='both', which='major', labelsize=18)
+            ax.tick_params(axis='both', which='major', labelsize=20)
             if j == 1:
                 ax.set_xlabel(legend)
-                ax.set_xlabel(legend, fontsize=18)
+                ax.set_xlabel(legend, fontsize=20)
             if i == 0:
                 ax.set_ylabel(metric)
-                ax.set_ylabel(metric, fontsize=18)
+                ax.set_ylabel(metric, fontsize=20)
             ax.grid()
 
             # Plotting the baseline (AutoGluon)
@@ -303,11 +307,11 @@ def generate_sensitivity_plots_num_portfolios(df, exp_name, title, save_name, ma
 
             # Setting legend properties
             if i == 0 and j == 0:
-                legend_obj = ax.legend(fontsize=18)
+                legend_obj = ax.legend(fontsize=20)
                 for text in legend_obj.get_texts():
                     text.set_fontsize(18)
 
-    fig.suptitle(f"{exp_name}, {title}", fontsize=18)
+    fig.suptitle(f"{exp_name}, {title}", fontsize=20)
     plt.tight_layout()
     plt.savefig(str(Paths.data_root / "results-baseline-comparison" / exp_name / save_name / f"sensitivity.png"))
     if show:
@@ -515,6 +519,9 @@ if __name__ == "__main__":
         ignore_cache=ignore_cache,
     )
 
+    experiment_common_kwargs_no_syn_portfolios = experiment_common_kwargs.copy()
+    experiment_common_kwargs_no_syn_portfolios['use_synthetic_portfolios'] = False
+
     experiments = [
         # Experiment(
         #     expname=expname, name=f"framework-default-{expname}",
@@ -595,6 +602,23 @@ if __name__ == "__main__":
         #     expname=expname, name=f"zeroshot-{expname}-num-portfolios-{seed}",
         #     run_fun=lambda s=seed: zeroshot_results(n_portfolios=n_portfolios, max_runtimes=[None], seed=s, **experiment_common_kwargs)
         #     ))
+
+
+        experiments.append(
+            Experiment(
+                expname=expname, name=f"zeroshot-metalearning-synthetic-portfolios-{expname}-num-portfolios-without-synthetic portfolios-{seed}",
+                run_fun=lambda s=seed: zeroshot_results_metalearning(
+                              n_portfolios=n_portfolios,
+                              name=f"zeroshot-metalearning-synthetic-portfolios-without-synthetic-portfolios-{expname}",
+                              expname=expname,
+                              max_runtimes=[None],
+                              seed=s,
+                              add_zeroshot_portfolios=False,
+                              method_name_suffix=" metalearning without synthetic portfolios",
+                              **experiment_common_kwargs_no_syn_portfolios, # use_synthetic_portfolios=False
+                              )
+            )
+        )
 
         experiments.append(
             Experiment(
