@@ -160,7 +160,7 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
 
         df_rank = transform_ranks(loss, deepcopy(dd))
 
-        indices = zeroshot_configs(-df_rank.values.T, n_portfolio)
+        indices = zeroshot_configs(df_rank.values.T, n_portfolio)
         portfolio_configs = [df_rank.index[i] for i in indices]
 
         metric_errors, ensemble_weights = self.repo.evaluate_ensemble(

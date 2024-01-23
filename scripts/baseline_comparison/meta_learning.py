@@ -80,6 +80,7 @@ def zeroshot_results_metalearning(
         ray_process_ratio: float = 1.,
         add_zeroshot_portfolios: bool = False,
         ignore_cache: bool = False,
+        metalearning_with_only_zeroshot: bool = False
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -102,6 +103,7 @@ def zeroshot_results_metalearning(
                          max_runtime, repo: EvaluationRepository, rank_scorer, normalized_scorer,
                          use_meta_features, method_name_suffix, seed):
 
+        print(f"running now method {method_name_suffix} with {seed}")
         df_rank, model_frameworks, n_portfolio = n_portfolio_model_frameworks_df_rank
 
         method_name = zeroshot_name(
@@ -326,9 +328,6 @@ def zeroshot_results_metalearning(
         return return_dct
 
     dd = repo._zeroshot_context.df_configs_ranked
-    # df_rank = dd.pivot_table(index="framework", columns="dataset", values="score_val").rank()
-    # TODO use normalized scores
-    # df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error").rank(ascending=False)
 
     model_frameworks_original = {
         framework: sorted([x for x in repo.configs() if framework in x])
@@ -338,7 +337,6 @@ def zeroshot_results_metalearning(
     assert loss in ["metric_error", "metric_error_val", "rank"]
 
     dd = dd[[loss, "framework", "task"]]
-    # instead of metric_error, let's use the actual task here; also rank them in ascending order
     random_portfolio_generator = None
 
     # TODO: impute other columns like train time when generating metric_errors
@@ -381,7 +379,7 @@ def zeroshot_results_metalearning(
                 zeroshot_metric_errors, _, zeroshot_config_name, portfolio_configs_zs, zeroshot_config_name = cache_function(fun=lambda: random_portfolio_generator.generate_evaluate_zeroshot(n_portfolio=n_portfolio, dd=dd.copy(), loss=loss),
                                                                                  cache_name=f"random_portfolio_generator_zeroshot_n_portfolio_{n_portfolio}",
                                                                                  cache_path=results_dir,
-                                                                                 # ignore_cache=ignore_cache,
+                                                                                 # ignore_cache=True,
                                                                                  )
                 random_portfolio_generator.portfolio_name_to_config[n_portfolio][zeroshot_config_name] = portfolio_configs_zs
 
@@ -426,6 +424,17 @@ def zeroshot_results_metalearning(
     assert len(model_frameworks_n_portfolios) == len(df_rank_n_portfolios) and len(n_portfolios) == len(df_rank_n_portfolios)
 
     n_portfolio_model_frameworks_df_rank = list(zip(df_rank_n_portfolios, model_frameworks_n_portfolios, n_portfolios))
+
+    if metalearning_with_only_zeroshot:
+        filtered_dfs = []
+        filtered_model_frameworks = []
+        for df in df_rank_n_portfolios:
+            # Filter rows where the framework starts with 'Portfolio-ZS-N'
+            filtered_df = df[df.index.to_series().str.startswith('Portfolio-ZS-N')]
+            filtered_dfs.append(filtered_df)
+            portfolio_filtered_name = filtered_df.index.tolist()
+            filtered_model_frameworks.append({"ensemble": portfolio_filtered_name})
+        n_portfolio_model_frameworks_df_rank = list(zip(filtered_dfs, filtered_model_frameworks, n_portfolios))
 
     result_list = parallel_for(
         evaluate_dataset,
