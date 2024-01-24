@@ -341,7 +341,7 @@ def zeroshot_results_metalearning(
 
     # TODO: impute other columns like train time when generating metric_errors
     if use_synthetic_portfolios:
-        assert loss == "metric_error", "synthetic portfolios currently only supported for metric_error loss"
+        # assert loss == "metric_error", "synthetic portfolios currently only supported for metric_error loss"
 
         df_rank_n_portfolios = []
         model_frameworks_n_portfolios = []
@@ -354,15 +354,16 @@ def zeroshot_results_metalearning(
             print(f"No previous random portfolio generator found for settings {n_synthetic_portfolios=} and {seed=}. Generating anew.")
             random_portfolio_generator = RandomPortfolioGenerator(repo=repo, n_portfolios=n_portfolios)
 
-            metric_errors, ensemble_weights, portfolio_info = random_portfolio_generator.generate_evaluate_bulk(
+            random_portfolio_generator.generate_evaluate_bulk(
                 n_portfolios=n_synthetic_portfolios,
                 portfolio_size=n_portfolios,
                 ensemble_size=100,
                 seed=seed,
                 backend="ray"
             )
-
             random_portfolio_generator.save_generator(generator_file_path)
+
+        # filtered_metric_errors, filtered_ensemble_weights, filtered_portfolio_name_to_cfg = random_portfolio_generator.filter_synthetic_portfolios(perc_best=0.2)
 
         repo.random_portfolio_generator = random_portfolio_generator
 

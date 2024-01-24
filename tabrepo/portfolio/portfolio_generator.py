@@ -1,7 +1,7 @@
 from tabrepo.portfolio.zeroshot_selection import zeroshot_configs
 from tabrepo.utils.normalized_scorer import NormalizedScorer
 from tabrepo.utils.rank_utils import RankScorer
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from tabrepo import EvaluationRepository
 import pandas as pd
 import numpy as np
@@ -133,20 +133,16 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
         pbar = tqdm(total=total_iterations, desc="Synthetic Portfolio Generation Progress")
 
         for p_s in portfolio_size:
-            print(f"generating synthetic portfolio of size {p_s}" )
             metric_errors_ps, ensemble_weights_ps, portfolio_name_ps = [], [], []
             for i in range(n_portfolios):
                 pbar.set_description(f"Synthetic Portfolio Generation Progress (size {p_s})")
-                # print(f"generating portfolio {i}/{n_portfolios} (portfolio size {p_s} of {portfolio_size}")
                 metric_errors, ensemble_weights, portfolio_name = self.generate_evaluate(portfolio_size=p_s, datasets=datasets, folds=folds, ensemble_size=ensemble_size, n_portfolio_iter=i, seed=seed, backend=backend)
                 metric_errors_ps.append(metric_errors)
                 ensemble_weights_ps.append(ensemble_weights)
-                # portfolio_name_ps.append(portfolio_name)
                 pbar.update(1)
 
             self.metric_errors[p_s] = metric_errors_ps
             self.ensemble_weights[p_s] = ensemble_weights_ps
-            # self.portfolio_name[p_s] = portfolio_name_ps
 
         pbar.close()
         return self.metric_errors, self.ensemble_weights, self.portfolio_name_to_config
@@ -174,3 +170,27 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
 
         zeroshot_config_name = self.zeroshot_name(n_portfolio=n_portfolio, ensemble_size=ensemble_size)
         return metric_errors, ensemble_weights, zeroshot_config_name, portfolio_configs, zeroshot_config_name
+
+    def filter_synthetic_portfolios(self, perc_best: float = 0.1) -> (Dict[int, List[pd.Series]], Dict[int, List[pd.Series]], Dict[int, Dict]):
+        filtered_metric_errors, filtered_ensemble_weights, filtered_portfolio_name_to_cfg = {}, {}, {}
+        for ((key_metric, series_list_metric), (key_ensembles, series_list_ensembles),
+             (key_portfolio_name_to_cfg, portfolio_name_to_cfg_dict)) in \
+                (zip(self.metric_errors.items(), self.ensemble_weights.items(), self.portfolio_name_to_config.items())):
+
+            mean_values = [s.mean() for s in series_list_metric]
+            threshold = pd.Series(mean_values).quantile(perc_best)
+
+            filtered_metric_errors[key_metric] = [s for s, mean in zip(series_list_metric, mean_values)
+                                                  if mean <= threshold]
+            filtered_ensemble_weights[key_ensembles] = [s for s, mean in zip(series_list_ensembles, mean_values)
+                                                        if mean <= threshold]
+
+            filtered_cfg_dict = {k: v for (k, v), mean in zip(portfolio_name_to_cfg_dict.items(), mean_values)
+                                                        if mean <= threshold}
+            filtered_portfolio_name_to_cfg[key_portfolio_name_to_cfg] = filtered_cfg_dict
+
+        self.metric_errors = filtered_metric_errors
+        self.ensemble_weights = filtered_ensemble_weights
+        self.portfolio_name_to_config = filtered_portfolio_name_to_cfg
+
+        return filtered_metric_errors, filtered_ensemble_weights, filtered_portfolio_name_to_cfg

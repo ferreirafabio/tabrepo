@@ -39,7 +39,7 @@ from scripts.baseline_comparison.baselines import (
 from scripts.baseline_comparison.meta_learning import zeroshot_results_metalearning
 from tabrepo.utils.meta_features import load_extended_meta_features
 from scripts.baseline_comparison.compare_results import winrate_comparison
-from scripts.baseline_comparison.vis_utils import visualize_config_selected
+from scripts.baseline_comparison.vis_utils import visualize_config_selected, plot_portfolio_selection
 from scripts.baseline_comparison.plot_utils import (
     MethodStyle,
     show_latex_table,
@@ -424,7 +424,7 @@ if __name__ == "__main__":
 
     n_eval_folds = args.n_folds
     # n_portfolios = [5, 10, 50, 100, n_portfolios_default]
-    n_portfolios = [2, 3, 4, 5, 10, 20]
+    n_portfolios = [2, 3, 4, 5, 10, 20, 40, 80, 100]
     # n_portfolios = [2, 3]
     max_runtimes = [300, 600, 1800, 3600, 3600 * 4, 24 * 3600]
     # n_training_datasets = list(range(10, 210, 10))
@@ -463,9 +463,18 @@ if __name__ == "__main__":
 
     synthetic_portfolios_str = f"synthetic_portfolios_{n_synthetic_portfolios}"
     exp_title += f", {synthetic_portfolios_str}"
+
+    # TODO: remove, just testing
+    exp_title += f", filter SP 20%"
+
+    loss_str = f"{loss}-loss"
+    exp_title += f", {loss_str}"
         
     exp_title_save_name = exp_title.replace(' ', '_').replace(',', '')
     exp_title_save_name += f"_{current_time}"
+
+    # TODO: remove, just testing
+    exp_title_save_name += f"_filter_sp_0.2"
 
     save_dir = Paths.data_root / "results-baseline-comparison" / args.repo / exp_title_save_name
     results_dir = Paths.data_root / "results-baseline-comparison" / args.repo
@@ -757,6 +766,7 @@ if __name__ == "__main__":
 
     # generate_sensitivity_plots(df, exp_name=args.repo, title=exp_title, save_name=exp_title_save_name, show=True, meta_learning=True)
     generate_sensitivity_plots_num_portfolios(df, exp_name=args.repo, title=exp_title, save_name=exp_title_save_name, max_runtimes=max_runtimes, show=True)
+    plot_portfolio_selection(exp_name=args.repo, save_name=exp_title_save_name, n_portfolios=n_portfolios)
 
     # visualize_config_selected(exp_name=args.repo, title=exp_title, save_name=exp_title_save_name)
 

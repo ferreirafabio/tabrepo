@@ -104,3 +104,43 @@ def save_feature_importance_plots(df, exp_name, save_name):
 
         # Close the current plot to prevent overlapping when creating the next subplot
         plt.close()
+
+
+def plot_portfolio_selection(exp_name, save_name, n_portfolios):
+    # Load the CSV file
+    df = pd.read_csv(str(Paths.data_root / "simulation" / exp_name / save_name / "results.csv"))
+
+    # Setup the plot
+    fig, axes = plt.subplots(nrows=1, ncols=len(n_portfolios), figsize=(15, 5), sharey=True)
+
+    def categorize_portfolio(name):
+        if name.startswith('Portfolio-ZS'):
+            return 'Zeroshot portfolios'
+        else:
+            return 'Synthetic portfolios'
+
+    for i, N in enumerate(n_portfolios):
+        # Filter for each N-value
+        filtered_df = df[df['method'].str.endswith(f"Portfolio-N{N} metalearning with zeroshot portfolios (ensemble)")]
+
+        # Drop NaNs in 'portfolio_name'
+        filtered_df = filtered_df.dropna(subset=['portfolio_name'])
+
+        # Categorize portfolio names
+        filtered_df['portfolio_category'] = filtered_df['portfolio_name'].apply(categorize_portfolio)
+
+        # Count the occurrences
+        category_counts = filtered_df['portfolio_category'].value_counts()
+        category_counts = category_counts.reindex(['Zeroshot portfolios', 'Synthetic portfolios'])
+
+        # Plot for each N-value
+        axes[i].bar(category_counts.index, category_counts.values)
+        axes[i].set_title(f'N={N}')
+        axes[0].set_ylabel('Count')
+        axes[i].tick_params(axis='x', rotation=45)
+        axes[i].yaxis.set_tick_params(labelbottom=True)
+
+    plt.suptitle('What portfolios does metalearning pick?', fontsize=16)
+    plt.tight_layout()
+    plt.savefig(str(Paths.data_root / "results-baseline-comparison" / exp_name / save_name / f"portfolio_zs_selected_comparison.png"))
+    plt.show()

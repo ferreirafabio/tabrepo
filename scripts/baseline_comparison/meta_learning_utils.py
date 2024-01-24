@@ -46,6 +46,10 @@ def transform_ranks(loss, dd):
         df_rank = minmax_normalize_tasks(df_rank)
         df_rank = df_rank.rank(ascending=True)
         print("using task-normalized metric_error_val")
+    # elif loss == "metric_error_unranked":
+    #     df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error")
+    #     df_rank = minmax_normalize_tasks(df_rank)
+    #     print("using task-normalized unranked metric_error")
     else:
         import sys
         print("loss not supported")
