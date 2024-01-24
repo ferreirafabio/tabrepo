@@ -107,10 +107,8 @@ def save_feature_importance_plots(df, exp_name, save_name):
 
 
 def plot_portfolio_selection(exp_name, save_name, n_portfolios):
-    # Load the CSV file
-    df = pd.read_csv(str(Paths.data_root / "simulation" / exp_name / save_name / "results.csv"))
+    df = pd.read_csv(str(Paths.data_root / "simulation" / exp_name / "results.csv"))
 
-    # Setup the plot
     fig, axes = plt.subplots(nrows=1, ncols=len(n_portfolios), figsize=(15, 5), sharey=True)
 
     def categorize_portfolio(name):
