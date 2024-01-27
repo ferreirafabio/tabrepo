@@ -20,7 +20,7 @@ from scripts.baseline_comparison.meta_learning_utils import (
     get_train_val_split,
     transform_ranks,
 )
-from tabrepo.portfolio.portfolio_generator import RandomPortfolioGenerator, AbstractPortfolioGenerator
+from tabrepo.portfolio.portfolio_generator import RandomPortfolioGenerator, AbstractPortfolioGenerator, ZeroshotEnsembleGenerator
 
 from sklearn.metrics import mean_squared_error
 from tabrepo.repository import EvaluationRepository
@@ -80,7 +80,9 @@ def zeroshot_results_metalearning(
         ray_process_ratio: float = 1.,
         add_zeroshot_portfolios: bool = False,
         ignore_cache: bool = False,
-        metalearning_with_only_zeroshot: bool = False
+        metalearning_with_only_zeroshot: bool = False,
+        filter_best_synthetic_portfolios: bool = False,
+        add_synthetic_zeroshot_portfolios: bool = False,
 ) -> List[ResultRow]:
     """
     :param dataset_names: list of dataset to use when fitting zeroshot
@@ -103,7 +105,7 @@ def zeroshot_results_metalearning(
                          max_runtime, repo: EvaluationRepository, rank_scorer, normalized_scorer,
                          use_meta_features, method_name_suffix, seed):
 
-        print(f"running now method {method_name_suffix} with {seed}")
+        print(f"running now method {method_name_suffix} with {seed=}")
         df_rank, model_frameworks, n_portfolio = n_portfolio_model_frameworks_df_rank
 
         method_name = zeroshot_name(
@@ -341,8 +343,6 @@ def zeroshot_results_metalearning(
 
     # TODO: impute other columns like train time when generating metric_errors
     if use_synthetic_portfolios:
-        # assert loss == "metric_error", "synthetic portfolios currently only supported for metric_error loss"
-
         df_rank_n_portfolios = []
         model_frameworks_n_portfolios = []
         generator_file_path = results_dir / f"random_portfolio_generator_repo_{expname}_num_portfolios_{n_synthetic_portfolios}_seed_{seed}.pkl"
@@ -363,44 +363,38 @@ def zeroshot_results_metalearning(
             )
             random_portfolio_generator.save_generator(generator_file_path)
 
-        # filtered_metric_errors, filtered_ensemble_weights, filtered_portfolio_name_to_cfg = random_portfolio_generator.filter_synthetic_portfolios(perc_best=0.2)
+        if filter_best_synthetic_portfolios:
+            filtered_metric_errors, filtered_ensemble_weights, filtered_portfolio_name_to_cfg = random_portfolio_generator.filter_synthetic_portfolios(perc_best=0.2)
 
         repo.random_portfolio_generator = random_portfolio_generator
 
-        for n_portfolio in n_portfolios:
-            m_e = random_portfolio_generator.metric_errors[n_portfolio]
-            portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[n_portfolio].keys())
-            dd_with_syn_portfolio = dd.copy()
-            dd_with_syn_portfolio = random_portfolio_generator.concatenate_bulk(base_df=dd_with_syn_portfolio,
-                                                                                to_add_series_list=m_e,
-                                                                                portfolio_names=portfolio_names
-                                                                                )
+        if n_portfolios and n_portfolios[0] is not None:
+            for n_portfolio in n_portfolios:
+                dd_with_syn_portfolio, portfolio_names = random_portfolio_generator.add_n_synthetic_portfolio(n_portfolio=n_portfolio, dd=dd)
 
-            if add_zeroshot_portfolios:
-                zeroshot_metric_errors, _, zeroshot_config_name, portfolio_configs_zs, zeroshot_config_name = cache_function(fun=lambda: random_portfolio_generator.generate_evaluate_zeroshot(n_portfolio=n_portfolio, dd=dd.copy(), loss=loss),
-                                                                                 cache_name=f"random_portfolio_generator_zeroshot_n_portfolio_{n_portfolio}",
-                                                                                 cache_path=results_dir,
-                                                                                 # ignore_cache=True,
-                                                                                 )
-                random_portfolio_generator.portfolio_name_to_config[n_portfolio][zeroshot_config_name] = portfolio_configs_zs
+                if add_zeroshot_portfolios:
+                    dd_with_syn_portfolio, portfolio_names = random_portfolio_generator.add_zeroshot_portfolio(n_portfolio=n_portfolio, dd_with_syn_portfolio=dd_with_syn_portfolio, dd=dd, loss=loss, results_dir=results_dir, seed=seed)
 
-                dd_with_syn_portfolio = random_portfolio_generator.concatenate(base_df=dd_with_syn_portfolio,
-                                                                               to_add_series=zeroshot_metric_errors,
-                                                                               portfolio_name=zeroshot_config_name
-                                                                               )
+                if add_synthetic_zeroshot_portfolios:
+                    if n_portfolio == 2:
+                        dd_with_synthetic_ps_2 = dd_with_syn_portfolio.copy()
+                    dd_with_syn_portfolio, portfolio_names = random_portfolio_generator.add_synthetic_zeroshot_portfolio(n_portfolio=n_portfolio,
+                                                                                                                         dd_with_syn_portfolio=dd_with_syn_portfolio,
+                                                                                                                         dd_with_synthetic_ps_2=dd_with_synthetic_ps_2,
+                                                                                                                         portfolio_names=portfolio_names,
+                                                                                                                         loss=loss,
+                                                                                                                         results_dir=results_dir,
+                                                                                                                         seed=seed)
 
-                portfolio_names = list(random_portfolio_generator.portfolio_name_to_config[n_portfolio].keys())
+                df_r = transform_ranks(loss, dd_with_syn_portfolio)
+                df_r.fillna(value=np.nanmax(df_r.values), inplace=True)
+                assert not any(df_r.isna().values.reshape(-1))
+                df_rank_n_portfolios.append(df_r)
 
-            df_r = transform_ranks(loss, dd_with_syn_portfolio)
-            df_r.fillna(value=np.nanmax(df_r.values), inplace=True)
-            assert not any(df_r.isna().values.reshape(-1))
-            df_rank_n_portfolios.append(df_r)
+                model_frameworks_copy = model_frameworks_original.copy()
+                model_frameworks_copy["ensemble"] = portfolio_names
+                model_frameworks_n_portfolios.append(model_frameworks_copy)
 
-            model_frameworks_copy = model_frameworks_original.copy()
-            model_frameworks_copy["ensemble"] = portfolio_names
-            model_frameworks_n_portfolios.append(model_frameworks_copy)
-
-   # no synthetic portfolios
     else:
         df_rank_n_portfolios = transform_ranks(loss, dd)
 

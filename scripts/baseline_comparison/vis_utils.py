@@ -110,6 +110,7 @@ def plot_portfolio_selection(exp_name, save_name, n_portfolios):
     df = pd.read_csv(str(Paths.data_root / "simulation" / exp_name / "results.csv"))
 
     fig, axes = plt.subplots(nrows=1, ncols=len(n_portfolios), figsize=(15, 5), sharey=True)
+    filter_method = "metalearning with zeroshot and best synthetic portfolios (ensemble)"
 
     def categorize_portfolio(name):
         if name.startswith('Portfolio-ZS'):
@@ -119,7 +120,8 @@ def plot_portfolio_selection(exp_name, save_name, n_portfolios):
 
     for i, N in enumerate(n_portfolios):
         # Filter for each N-value
-        filtered_df = df[df['method'].str.endswith(f"Portfolio-N{N} metalearning with zeroshot portfolios (ensemble)")]
+        # filtered_df = df[df['method'].str.endswith(f"Portfolio-N{N} metalearning with zeroshot portfolios (ensemble)")]
+        filtered_df = df[df['method'].str.endswith(f"Portfolio-N{N} {filter_method}")]
 
         # Drop NaNs in 'portfolio_name'
         filtered_df = filtered_df.dropna(subset=['portfolio_name'])
@@ -138,7 +140,7 @@ def plot_portfolio_selection(exp_name, save_name, n_portfolios):
         axes[i].tick_params(axis='x', rotation=45)
         axes[i].yaxis.set_tick_params(labelbottom=True)
 
-    plt.suptitle('What portfolios does metalearning pick?', fontsize=16)
+    plt.suptitle(f'What portfolios does {filter_method} pick?', fontsize=13)
     plt.tight_layout()
     plt.savefig(str(Paths.data_root / "results-baseline-comparison" / exp_name / save_name / f"portfolio_zs_selected_comparison.png"))
     plt.show()

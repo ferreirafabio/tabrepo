@@ -39,8 +39,8 @@ def transform_ranks(loss, dd):
     elif loss == "metric_error":
         df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error")
         df_rank = minmax_normalize_tasks(df_rank)
-        df_rank = df_rank.rank(ascending=True)
-        print("using task-normalized metric_error")
+        # df_rank = df_rank.rank(ascending=True)
+        print("using task-normalized NO RANK metric_error")
     elif loss == "metric_error_val":
         df_rank = dd.pivot_table(index="framework", columns="task", values="metric_error_val")
         df_rank = minmax_normalize_tasks(df_rank)
