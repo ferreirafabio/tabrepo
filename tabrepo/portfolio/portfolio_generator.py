@@ -17,6 +17,7 @@ from sklearn.decomposition import PCA
 from pathlib import Path
 from tabrepo.utils.cache import cache_function, cache_function_dataframe
 
+
 class AbstractPortfolioGenerator:
     def __init__(self, repo: EvaluationRepository):
         self.repo = repo
@@ -25,6 +26,16 @@ class AbstractPortfolioGenerator:
         raise NotImplementedError()
 
     def evaluate(self, portfolio: List[str], datasets: List[str] = None, folds: List[int] = None, ensemble_size: int = 100, backend: str = "ray") -> Tuple[pd.Series, pd.DataFrame]:
+        """
+        evaluates a portfolio on datasets.
+        :param portfolio: a list of configurations
+        :param datasets: a list of datasets
+        :param folds: a list of fold int identifiers
+        :param ensemble_size: specifies the size of an ensemble for the Caruana approach
+        :param backend: specifies whether the ensemble evaluation should be run in parallel mode (ray) or sequentially
+        :return: the metric errors a pd.series of shape (len(datasets) * number of folds, 1) of the ensemble evaluated on the datasets along
+        with the ensemble weights, a pd.DataFrame of shape (len(datasets) * number of folds *, len(portfolio)
+        """
         if datasets is None:
             datasets = self.repo.datasets()
 
@@ -79,10 +90,26 @@ class AbstractPortfolioGenerator:
         return f"{base_name}{suffix}"
 
     def concatenate(self, base_df: pd.DataFrame, to_add_series: pd.Series, portfolio_name: str) -> pd.DataFrame:
+        """
+        concatenate a pd.Series (typically metric errors from an evaluated ensemble) to a base pd.DataFrame (existing
+        dataframe containing the ranks that needs additional results) by first preparing the series to have a
+        framework column with the portfolio_name and then concatenating both by  according to the framework name.
+        :param base_df: the pd.DataFrame containing some metric errors or performance data.
+        :param to_add_series:
+        :param portfolio_name:
+        :return:
+        """
         metric_errors_prepared = self._prepare_merge(metric_errors=to_add_series, portfolio_name=portfolio_name)
         return pd.concat([base_df, metric_errors_prepared], axis=0, ignore_index=True)
 
     def concatenate_bulk(self, base_df: pd.DataFrame, to_add_series_list: List[pd.Series], portfolio_names: List[str]) -> pd.DataFrame:
+        """
+        concatenates a list of pd.Series to an existing base pd.DataFrame.
+        :param base_df: the base dataframe with columns metric_error, framework, task
+        :param to_add_series_list: a list of pd.Series of size len(portfolio_names), the list elements (pd.Series) are of shape (n_folds* number of datasets, )
+        :param portfolio_names: a list of strings containing the unique portfolio names of size len(to_add_series_list)
+        :return: the base dataframe with all series added to it along the row-axis
+        """
         assert all(len(series) == len(to_add_series_list[0]) for series in to_add_series_list), "All Series must have the same length"
         assert len(to_add_series_list) == len(portfolio_names)
 
@@ -91,6 +118,12 @@ class AbstractPortfolioGenerator:
         return base_df
 
     def _prepare_merge(self, metric_errors: pd.Series, portfolio_name: str):
+        """
+
+        :param metric_errors: a pd.Series of shape (n_folds * number of datasets, ) where the index has information on metric_error, framework, and task
+        :param portfolio_name: a unique portfolio name string
+        :return: the transformed metric_errors pd.Series with shape (n_folds * number of datasets, 3) where the columns are (metric_error, framework, task)
+        """
         metric_errors = metric_errors.reset_index(drop=False)
         metric_errors["task"] = metric_errors.apply(lambda x: self.repo.task_name(x["dataset"], x["fold"]), axis=1)
         metric_errors["metric_error"] = metric_errors["error"]
@@ -109,6 +142,22 @@ class AbstractPortfolioGenerator:
                                    config_name_map: Dict = None,
                                    base_name: str = None,
                                    actual_n_portfolio: int = None) -> Tuple[pd.Series, pd.DataFrame, str, List[str]]:
+        """
+        given datasets and metric errors, generated and evaluates a zeroshot portfolio
+        :param n_portfolio: the number of configurations of the zeroshot portfolio
+        :param dd: the metric errors of shape (task_id, 3) where 3=(metric_error, framework, task columns)
+        :param datasets: a list of str containing the dataset names for which the zeroshot portfolio is evaluated
+        :param folds: number of dataset folds
+        :param ensemble_size: number of members to select with Caruana
+        :param loss: a str indicating which loss to be used, needs to be in ["rank", "metric_error", "metric_error_val"]
+        :param backend: whether to use ray for parallel processing or sequential processing
+        :param config_name_map: a dictionary mapping from portfolio name to config name, if provided, portfolio configs get mapped, else the portfolio_name is used subsequently
+        :param base_name: a str used for the prefix for the zeroshot portfolio name (default 'portfolio-ZS')
+        :param actual_n_portfolio: when applying zeroshot to configs that are ensembles (e.g. of size 2), this int parameter indicates what the 'actual' portfolio size is,
+        e.g., when a portfolio of size 20 is to be created with zeroshot based on ensembles of size 2, we can use actual_n_portfolio=20 and portfolio_size=10 to achieve this
+        :return: a tuple consisting of zeroshot evaluation metrics and parameter (metric_errors, ensemble_weights, zeroshot_config_name, portfolio_configs), even if actual_n_portfolio is provided
+        the result is still an ensemble consisting of single config strings
+        """
         if datasets is None:
             datasets = self.repo.datasets()
 
@@ -206,6 +255,12 @@ class AbstractPortfolioGenerator:
         return self.metric_errors, self.ensemble_weights, self.portfolio_name_to_config
 
     def add_n_synthetic_portfolio(self, n_portfolio: int, dd: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
+        """
+        adds synthetic portfolios that were previously generated to an existing pd.DataFrame consisting of metric errors or performance data (performance matrix)
+        :param n_portfolio: identifier to determine which of the performance matrices is used to augment the performance matrix
+        :param dd: the base pd.DataFrame (performance matrix) containing the performance data
+        :return: the updated base pd.DataFrame augmented by synthetic portfolios of the respective n_portfolio pool
+        """
         m_e = self.metric_errors[n_portfolio]
         portfolio_names = list(self.portfolio_name_to_config[n_portfolio].keys())
         dd_with_syn_portfolio = dd.copy()
@@ -218,7 +273,16 @@ class AbstractPortfolioGenerator:
     def add_zeroshot_portfolio(self, n_portfolio: int, dd: pd.DataFrame, dd_with_syn_portfolio: pd.DataFrame,
                                loss: str, results_dir: str,
                                seed: int = 0) -> Tuple[pd.DataFrame, List[str]]:
-
+        """
+        used to add a zeroshot portfolio to an existing pd.DataFrame performance matrix
+        :param n_portfolio: indicates the size of the zeroshot portfolio that is supposed to be added to the performance matrix
+        :param dd: the base performance matrix with the config evaluations without synthetic ensembles, pd. DataFrame of shape (task_id, 3) where 3=("metric_error", "framework", "task")
+        :param dd_with_syn_portfolio: the base pd.DataFrame consisting of config evaluations as well as synthetic ensemble evaluations, same shape as dd but with more task_ids
+        :param loss: a str indicating which loss to be used, needs to be in ["rank", "metric_error", "metric_error_val"]
+        :param results_dir: a path as str that identifies where to store the random portfolio generator file
+        :param seed: used to identify the correct random portfolio generator file
+        :return: the original performance matrix augmented by the synthetic portfolios as well as a list of strings containing the names of the synthetic portfolios
+        """
         zeroshot_metric_errors, _, zeroshot_config_name, portfolio_configs_zs = cache_function(
             fun=lambda: self.generate_evaluate_zeroshot(n_portfolio=n_portfolio,
                                                         dd=dd.copy(),
@@ -242,11 +306,21 @@ class AbstractPortfolioGenerator:
                                          dd_with_synthetic_ps_2: pd.DataFrame, portfolio_names: List[str],
                                          results_dir: str, loss: str = "metric_error",
                                          seed: int = 0) -> Tuple[pd.DataFrame, List[str]]:
-
+        """
+        adds a zeroshot portfolio based on synthetic portfolios of n_portfolio size 2 to the current performance matrix.
+        :param n_portfolio: the size of the resulting portfolio
+        :param dd_with_syn_portfolio: the 'running' base performance matrix containing single configurations as well as the synthetic portfolios that keeps getting augmented
+        :param dd_with_synthetic_ps_2: the 'base' performance matrix that contains the random synthetic portfolios of size 2 of which the zeroshot algorithm produces larger portfolios
+        :param portfolio_names: a list of synthetic portfolio names
+        :param results_dir: a path as str that identifies where to store the random synthetic portfolio generator file
+        :param loss: a str indicating which loss to be used, needs to be in ["rank", "metric_error", "metric_error_val"]
+        :param seed: used to identify the correct random portfolio generator file
+        :return: the running performance matrix augmented by the synthetic zeroshot portfolios as well as a list of strings containing the names of the synthetic zeroshot portfolios
+        """
+        # apply zeroshot only to ensembles of size 2; Portfolio-ZS also included
         if n_portfolio <= 2 or n_portfolio % 2 != 0 or dd_with_synthetic_ps_2 is None:
             return dd_with_syn_portfolio, portfolio_names
 
-        # apply zeroshot only to ensembles of size 2; Portfolio-ZS also included
         dd_with_synthetic_ps_2_copy = deepcopy(dd_with_synthetic_ps_2)
         dd_syn_portfolios_ps_2_wo_single_configs = dd_with_synthetic_ps_2_copy[dd_with_synthetic_ps_2_copy["framework"].str.startswith('Portfolio')]
 
@@ -283,6 +357,9 @@ class AbstractPortfolioGenerator:
 
 
 class RandomPortfolioGenerator(AbstractPortfolioGenerator):
+    """
+    a class to randomly sample single configs for ensemble generation
+    """
     def __init__(self, repo: EvaluationRepository, n_portfolios: List[int]):
         super().__init__(repo=repo)
         self.n_portfolios = n_portfolios
@@ -292,11 +369,20 @@ class RandomPortfolioGenerator(AbstractPortfolioGenerator):
         self.portfolio_name_to_config = {portfolio_size: {} for portfolio_size in n_portfolios}
 
     def generate(self, portfolio_size: int, seed: int = 0) -> List[str]:
+        """
+        samples configurations at random without replacement
+        :param portfolio_size: specifies the number of randomly sampled configs
+        :param seed: set to seed the RNG
+        :return: a list of sampled config strings
+        """
         rng = np.random.default_rng(seed=seed)
         return list(rng.choice(self.repo.configs(), portfolio_size, replace=False))
 
 
 class ZeroshotEnsembleGenerator(AbstractPortfolioGenerator):
+    """
+
+    """
     def __init__(self, repo: EvaluationRepository):
         super().__init__(repo=repo)
 

@@ -110,7 +110,8 @@ def plot_portfolio_selection(exp_name, save_name, n_portfolios):
     df = pd.read_csv(str(Paths.data_root / "simulation" / exp_name / "results.csv"))
 
     fig, axes = plt.subplots(nrows=1, ncols=len(n_portfolios), figsize=(15, 5), sharey=True)
-    filter_method = "metalearning with zeroshot and best synthetic portfolios (ensemble)"
+    # filter_method = "metalearning with zeroshot and best synthetic portfolios (ensemble)"
+    filter_method = "metalearning with zeroshot and zeroshot synthetic portfolios (ensemble)"
 
     def categorize_portfolio(name):
         if name.startswith('Portfolio-ZS'):
